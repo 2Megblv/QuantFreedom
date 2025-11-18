@@ -60,7 +60,7 @@ setup(
             "tabulate",
         ]
     },
-    python_requires=">=3.6, <3.11",
+    python_requires=">=3.8, <3.13",
     license='Apache 2.0 with Commons Clause',
     classifiers=[
         "Development Status :: 5 - Production/Stable",

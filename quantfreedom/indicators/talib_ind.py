@@ -1,9 +1,18 @@
 # https://ta-lib.github.io/ta-lib-python/index.html
 import pandas as pd
 import numpy as np
-import talib
-from talib.abstract import Function
-from talib import get_functions
+
+# Make talib optional for testing
+try:
+    import talib
+    from talib.abstract import Function
+    from talib import get_functions
+    TALIB_AVAILABLE = True
+except ImportError:
+    TALIB_AVAILABLE = False
+    talib = None
+    Function = None
+    get_functions = None
 from itertools import product
 from quantfreedom._typing import pdFrame, Array1d
 

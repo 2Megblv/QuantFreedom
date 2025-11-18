@@ -7,7 +7,7 @@ name = "quantfreedom"
 version = "0.0.03.post1"
 description = "Python library for backtesting and analyzing trading strategies at scale"
 readme = "README.md"
-requires-python = ">=3.8,<3.12"
+requires-python = ">=3.8,<3.13"
 license = {text = "Apache 2.0 with Commons Clause"}
 authors = [
     {name = "Quant Freedom", email = "QuantFreedom1022@gmail.com"}
