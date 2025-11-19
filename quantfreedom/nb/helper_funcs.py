@@ -43,6 +43,140 @@ def static_var_checker_nb(
     tsl_true_or_false: bool,
     upside_filter: float,
 ) -> StaticVariables:
+    """
+    Validate backtest configuration and create StaticVariables tuple.
+
+    This function performs comprehensive validation of all static backtest
+    parameters before running simulations. It checks parameter ranges,
+    validates mutual exclusivity constraints, and converts percentage
+    values to decimals. After validation, it constructs a StaticVariables
+    namedtuple that is passed to all position and execution functions.
+
+    Parameters
+    ----------
+    divide_records_array_size_by : float
+        Memory optimization factor for result arrays (1 to 1000).
+        Higher values reduce memory usage when testing many combinations
+        with strict filters. Use 1 for no filtering, 10-100 for normal
+        filtering, 100+ for strict filtering.
+    equity : float
+        Starting account equity (must be positive and finite)
+    fee_pct : float
+        Trading fee percentage (e.g., 0.1 for 0.1% maker/taker fees).
+        Will be divided by 100 to convert to decimal.
+    gains_pct_filter : float
+        Minimum profit percentage to include strategy in results.
+        Use -np.inf for no filter.
+    lev_mode : int
+        Leverage mode (LeverageMode enum): Isolated or LeastFreeCashUsed
+    max_lev : float
+        Maximum leverage allowed (1 to 100)
+    max_order_size_pct : float
+        Maximum order size as percentage of equity (min_order_size_pct to 100)
+    max_order_size_value : float
+        Maximum order size in dollars (must be > min_order_size_value)
+    min_order_size_pct : float
+        Minimum order size as percentage of equity (0.01 to 100)
+    min_order_size_value : float
+        Minimum order size in dollars (must be >= 1)
+    mmr_pct : float
+        Maintenance margin rate percentage for liquidation calculations.
+        Will be divided by 100 to convert to decimal.
+    order_type : int
+        Order type (OrderType enum): LongEntry, ShortEntry, or Both
+    size_type : int
+        Position sizing method (SizeType enum): Amount, PercentOfAccount,
+        RiskAmount, or RiskPercentOfAccount
+    sl_to_be_then_trail : bool
+        If True, convert stop loss to trailing stop after hitting breakeven.
+        Cannot be True if tsl_true_or_false is True.
+    sl_to_be : bool
+        If True, move stop loss to breakeven when profit threshold reached.
+        Cannot be True if tsl_true_or_false is True.
+    total_trade_filter : int
+        Minimum number of trades required to include strategy in results.
+        Must be >= 0.
+    tsl_true_or_false : bool
+        If True, use trailing stop loss.
+        Cannot be True if sl_to_be or sl_to_be_then_trail are True.
+    upside_filter : float
+        R² filter for equity curve quality (-1 to 1).
+        Filters strategies by to-the-upside metric.
+        Use -1 for no filter.
+
+    Returns
+    -------
+    StaticVariables
+        Validated and processed static variables with:
+        - Percentage values converted to decimals (fee_pct, mmr_pct, etc.)
+        - All validation checks passed
+        - Ready for use in position and execution functions
+
+    Raises
+    ------
+    ValueError
+        - If equity <= 0 or not finite
+        - If fee_pct < 0 or not finite
+        - If mmr_pct < 0 or not finite
+        - If max_lev not between 1 and 100
+        - If min_order_size_pct not between 0.01 and 100
+        - If max_order_size_pct < min_order_size_pct or > 100
+        - If min_order_size_value < 1
+        - If max_order_size_value < min_order_size_value
+        - If gains_pct_filter is np.inf
+        - If total_trade_filter < 0 or not finite
+        - If both sl_to_be and tsl_true_or_false are True
+        - If sl_to_be is not boolean
+        - If sl_to_be_then_trail is not boolean
+        - If tsl_true_or_false is not boolean
+        - If order_type is invalid or out of range
+        - If upside_filter not between -1 and 1
+        - If divide_records_array_size_by not between 1 and 1000
+
+    Notes
+    -----
+    **Mutual Exclusivity Rules**:
+        - Cannot use both sl_to_be and tsl_true_or_false simultaneously
+        - sl_to_be_then_trail requires sl_to_be to be True
+
+    **Percentage Conversions**:
+        The following parameters are divided by 100 to convert to decimals:
+        - fee_pct: 0.1 → 0.001
+        - mmr_pct: 0.5 → 0.005
+        - max_order_size_pct: 50 → 0.5
+        - min_order_size_pct: 1 → 0.01
+
+    **Memory Optimization**:
+        divide_records_array_size_by reduces result array allocation.
+        Formula: array_size = combinations / divide_records_array_size_by
+        Example: 5M combinations / 100 = 50K result array rows
+
+    Examples
+    --------
+    >>> # Standard configuration for crypto futures
+    >>> static_vars = static_var_checker_nb(
+    ...     divide_records_array_size_by=1.0,
+    ...     equity=1000.0,
+    ...     fee_pct=0.1,  # 0.1% fees
+    ...     gains_pct_filter=-np.inf,
+    ...     lev_mode=LeverageMode.Isolated,
+    ...     max_lev=10.0,
+    ...     max_order_size_pct=100.0,
+    ...     max_order_size_value=np.inf,
+    ...     min_order_size_pct=0.01,
+    ...     min_order_size_value=1.0,
+    ...     mmr_pct=0.5,  # 0.5% maintenance margin
+    ...     order_type=OrderType.LongEntry,
+    ...     size_type=SizeType.RiskPercentOfAccount,
+    ...     sl_to_be_then_trail=False,
+    ...     sl_to_be=False,
+    ...     total_trade_filter=0,
+    ...     tsl_true_or_false=False,
+    ...     upside_filter=-1.0,
+    ... )
+    >>> static_vars.fee_pct  # 0.001 (converted from 0.1%)
+    >>> static_vars.mmr_pct  # 0.005 (converted from 0.5%)
+    """
     if equity < 0 or not np.isfinite(equity):
         raise ValueError("YOU HAVE NO MONEY!!!! You Broke!!!!")
 
