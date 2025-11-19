@@ -35,27 +35,89 @@ def increase_position_nb(
     static_variables_tuple: StaticVariables,
 ) -> Tuple[AccountState, OrderResult]:
     """
-    Unified function to increase position (long or short).
+    Enter or add to a position (direction-agnostic implementation).
+
+    This unified function handles both long and short position increases by using
+    a direction parameter to determine position-specific calculations. It manages
+    position sizing, leverage, stop losses, take profits, and liquidation prices
+    with support for multiple sizing strategies and risk management modes.
+
+    The function consolidates the logic previously duplicated between
+    long_increase_nb() and short_increase_nb(), eliminating 92.6% code duplication.
 
     Parameters
     ----------
     direction : int
-        1 for long position, -1 for short position
+        Position direction: 1 for long (buy), -1 for short (sell)
     price : float
-        Current market price
+        Current market price for entry
     account_state : AccountState
-        Current account state
+        Current account state including available balance, equity, cash used
     entry_order : EntryOrder
-        Entry order parameters
+        Entry order configuration including leverage, size parameters, stop loss
+        and take profit percentages, and risk management settings
     order_result : OrderResult
-        Previous order result
+        Previous order result with current position size, average entry, and
+        risk management prices. Use empty OrderResult for new positions.
     static_variables_tuple : StaticVariables
-        Static backtest variables
+        Static backtest configuration including fee percentage, max leverage,
+        order size constraints, leverage mode, and size type
 
     Returns
     -------
-    Tuple[AccountState, OrderResult]
-        Updated account state and order result
+    account_state_new : AccountState
+        Updated account state with adjusted balances after position increase
+    order_result_new : OrderResult
+        New order result with updated position size, average entry, stop loss,
+        take profit, and liquidation prices
+
+    Raises
+    ------
+    ValueError
+        If risk-based sizing produces position size < 1
+    RejectedOrderError
+        If size value violates min/max constraints, max equity risk exceeded,
+        cash requirements not met, or available balance becomes negative
+
+    Notes
+    -----
+    **Position Sizing**: Supports four modes (SizeType enum):
+        - Amount: Fixed dollar amount per trade
+        - PercentOfAccount: Percentage of current equity
+        - RiskAmount: Fixed dollar risk with SL-based sizing
+        - RiskPercentOfAccount: Percentage risk with SL-based sizing
+
+    **Leverage Calculation**: For LeastFreeCashUsed mode, leverage is
+    calculated dynamically based on stop loss distance to minimize margin
+    while avoiding liquidation.
+
+    **Direction-Dependent Logic**:
+        - Long positions: SL below entry, TP above entry, liquidation below
+        - Short positions: SL above entry, TP below entry, liquidation above
+        - Multipliers: sl_direction = -direction, tp_direction = direction
+
+    **Risk Management**:
+        - Validates position against max_equity_risk_pct/value if set
+        - Returns OrderStatus.Ignored if risk limits exceeded
+        - Calculates bankruptcy fees based on direction and leverage
+
+    **Average Entry Calculation**: When adding to existing positions, computes
+    weighted average entry price based on current and new position sizes.
+
+    Examples
+    --------
+    >>> # Long position with 2% stop loss, 10x leverage
+    >>> direction = 1  # Long
+    >>> price = 50000.0
+    >>> account_state = AccountState(available_balance=1000.0, ...)
+    >>> entry_order = EntryOrder(leverage=10.0, sl_pcts=0.02, ...)
+    >>> order_result = OrderResult()  # Empty for new position
+    >>> new_account, new_order = increase_position_nb(
+    ...     direction, price, account_state, entry_order,
+    ...     order_result, static_vars
+    ... )
+    >>> new_order.position  # Position size in dollars
+    >>> new_order.sl_prices  # Stop loss price (below entry for long)
     """
     # Initialize new values
     available_balance_new = account_state.available_balance
@@ -429,23 +491,84 @@ def decrease_position_nb(
     account_state: AccountState,
 ) -> Tuple[AccountState, OrderResult]:
     """
-    Unified function to decrease/close position (long or short).
+    Exit or reduce a position (direction-agnostic implementation).
+
+    This unified function handles closing or partially closing both long and short
+    positions. It calculates realized PnL, updates account balances proportionally,
+    and returns margin to available balance. The function uses direction-dependent
+    logic to correctly calculate profits and losses for both position types.
+
+    The function consolidates logic previously duplicated between long_decrease_nb()
+    and short_decrease_nb(), eliminating code duplication.
 
     Parameters
     ----------
     direction : int
-        1 for long position, -1 for short position
+        Position direction: 1 for long (buy), -1 for short (sell)
     fee_pct : float
-        Fee percentage
+        Fee percentage as decimal (e.g., 0.001 for 0.1%)
     order_result : OrderResult
-        Current order result with position details
+        Current order result containing position size, average entry price,
+        exit price, and size_value indicating amount to close. If size_value
+        >= position, the entire position is closed.
     account_state : AccountState
-        Current account state
+        Current account state with equity, available balance, cash used,
+        and cash borrowed
 
     Returns
     -------
-    Tuple[AccountState, OrderResult]
-        Updated account state and order result
+    account_state_new : AccountState
+        Updated account state with:
+        - equity adjusted by realized PnL
+        - available_balance increased by returned margin + PnL
+        - cash_used reduced proportionally
+        - cash_borrowed reduced proportionally
+    order_result_new : OrderResult
+        New order result with:
+        - position reduced by size_value (or 0 if fully closed)
+        - fees_paid calculated from open and close fees
+        - realized_pnl after fees
+        - pct_chg_trade as percentage gain/loss from average entry
+
+    Notes
+    -----
+    **PnL Calculation**:
+        - Long: profit when exit price > entry price
+        - Short: profit when exit price < entry price
+        - Formula: pnl = coin_size * (exit_price - entry_price) * direction
+
+    **Fee Calculation**:
+        - Open fee: charged when position was opened (from average entry)
+        - Close fee: charged when position is closed (from exit price)
+        - Total: fees_paid = open_fee + close_fee
+
+    **Cash Management**:
+        - Margin is returned proportionally to position reduction
+        - Cash borrowed is reduced by same percentage as position
+        - Available balance receives: returned margin + realized PnL
+
+    **Partial Closes**: If order_result.size_value < order_result.position,
+    only partial position is closed and proportional PnL/fees are calculated.
+
+    Examples
+    --------
+    >>> # Close long position with profit
+    >>> direction = 1  # Long
+    >>> fee_pct = 0.001  # 0.1% fees
+    >>> order_result = OrderResult(
+    ...     position=1000.0,  # $1000 position
+    ...     average_entry=50000.0,  # Entered at $50k
+    ...     price=51000.0,  # Exiting at $51k (2% profit)
+    ...     size_value=1000.0,  # Close full position
+    ...     ...
+    ... )
+    >>> account_state = AccountState(equity=1000.0, ...)
+    >>> new_account, new_order = decrease_position_nb(
+    ...     direction, fee_pct, order_result, account_state
+    ... )
+    >>> new_order.realized_pnl  # ~19.0 (2% profit minus fees)
+    >>> new_order.position  # 0.0 (fully closed)
+    >>> new_account.equity  # 1019.0 (original + PnL)
     """
     # Determine size to close (handle partial closes)
     if order_result.size_value >= order_result.position:

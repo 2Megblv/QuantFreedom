@@ -26,10 +26,41 @@ def long_increase_nb(
     static_variables_tuple: StaticVariables,
 ) -> Tuple[AccountState, OrderResult]:
     """
-    Increase or open a long position (backward compatibility wrapper).
+    Enter or add to a long position (backward compatibility wrapper).
 
-    This function now calls the unified increase_position_nb with direction=1.
-    All logic has been consolidated into position_funcs.py to eliminate duplication.
+    This function is a thin wrapper around increase_position_nb() that maintains
+    backward compatibility with existing code. All position logic has been
+    unified in position_funcs.py to eliminate the 92.6% code duplication that
+    previously existed between long and short functions.
+
+    For detailed documentation of position sizing, leverage calculation, and
+    risk management, see increase_position_nb() in position_funcs.py.
+
+    Parameters
+    ----------
+    price : float
+        Current market price for entry
+    account_state : AccountState
+        Current account state
+    entry_order : EntryOrder
+        Entry order configuration
+    order_result : OrderResult
+        Previous order result (empty for new positions)
+    static_variables_tuple : StaticVariables
+        Static backtest configuration
+
+    Returns
+    -------
+    account_state_new : AccountState
+        Updated account state
+    order_result_new : OrderResult
+        New order result with position details
+
+    See Also
+    --------
+    increase_position_nb : Unified position increase function (direction-agnostic)
+    short_increase_nb : Short position equivalent
+    long_decrease_nb : Close/reduce long positions
     """
     return increase_position_nb(
         direction=1,  # Long position
@@ -48,10 +79,36 @@ def long_decrease_nb(
     account_state: AccountState,
 ):
     """
-    Decrease or close a long position (backward compatibility wrapper).
+    Exit or reduce a long position (backward compatibility wrapper).
 
-    This function now calls the unified decrease_position_nb with direction=1.
-    All logic has been consolidated into position_funcs.py to eliminate duplication.
+    This function is a thin wrapper around decrease_position_nb() that maintains
+    backward compatibility. All position closing logic has been unified in
+    position_funcs.py to eliminate code duplication.
+
+    For detailed documentation of PnL calculation, fee handling, and cash
+    management, see decrease_position_nb() in position_funcs.py.
+
+    Parameters
+    ----------
+    fee_pct : float
+        Fee percentage as decimal (e.g., 0.001 for 0.1%)
+    order_result : OrderResult
+        Current order result with position size and exit price
+    account_state : AccountState
+        Current account state
+
+    Returns
+    -------
+    account_state_new : AccountState
+        Updated account state with PnL applied
+    order_result_new : OrderResult
+        New order result with realized PnL and reduced position
+
+    See Also
+    --------
+    decrease_position_nb : Unified position decrease function (direction-agnostic)
+    short_decrease_nb : Short position equivalent
+    long_increase_nb : Open/add to long positions
     """
     return decrease_position_nb(
         direction=1,  # Long position

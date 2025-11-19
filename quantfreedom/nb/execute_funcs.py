@@ -43,6 +43,110 @@ def check_sl_tp_nb(
     order_records_id: Optional[Array1d] = None,
     order_records: Optional[RecordArray] = None,
 ) -> OrderResult:
+    """
+    Check and execute stop loss, take profit, and liquidation conditions.
+
+    This function is called on each bar to determine if any exit conditions
+    have been triggered (stop loss, trailing stop loss, take profit, or
+    liquidation). It also manages advanced stop loss features like moving
+    stop loss to breakeven and implementing trailing stop losses.
+
+    The function uses bar high/low prices to check trigger conditions with
+    correct priority: liquidation > stop loss > take profit. It updates
+    the order result with the appropriate exit price and order type if
+    any condition is met.
+
+    Parameters
+    ----------
+    high_price : float
+        Highest price during the current bar
+    low_price : float
+        Lowest price during the current bar
+    open_price : float
+        Opening price of current bar (used for SL/TSL trailing logic)
+    close_price : float
+        Closing price of current bar (used for SL/TSL trailing logic)
+    order_settings_counter : int
+        Current order settings index for record keeping
+    entry_type : int
+        Order type (OrderType.LongEntry or OrderType.ShortEntry)
+    fee_pct : float
+        Fee percentage for breakeven calculations
+    bar : int
+        Current bar index for record keeping
+    account_state : AccountState
+        Current account state
+    order_result : OrderResult
+        Current order result with position and stop prices
+    stops_order : StopsOrder
+        Stop loss configuration including breakeven and trailing parameters
+    order_records_id : Optional[Array1d], default None
+        Array tracking order record IDs (incremented when stops move)
+    order_records : Optional[RecordArray], default None
+        Array for storing order records when stops are adjusted
+
+    Returns
+    -------
+    order_result_new : OrderResult
+        Updated order result with:
+        - order_type: Changed to exit type if condition triggered
+          (LongSL, LongTP, ShortSL, etc.)
+        - price: Set to exit price if condition met, np.nan otherwise
+        - size_value: Set to np.inf for full exit, np.nan if no exit
+        - sl_prices/tsl_prices: Updated if trailing stop adjusted
+        - moved_sl_to_be: Set True if stop moved to breakeven
+
+    Notes
+    -----
+    **Exit Priority** (checked in this order):
+        1. Liquidation - Highest priority, always checked first
+        2. Stop Loss - Regular or trailing stop loss
+        3. Take Profit - Checked last
+
+    **Long Position Logic**:
+        - SL triggered: if low_price <= sl_price
+        - TSL triggered: if low_price <= tsl_price
+        - Liquidation triggered: if low_price <= liq_price
+        - TP triggered: if high_price >= tp_price
+
+    **Short Position Logic**:
+        - SL triggered: if high_price >= sl_price
+        - TSL triggered: if high_price >= tsl_price
+        - Liquidation triggered: if high_price >= liq_price
+        - TP triggered: if low_price <= tp_price
+
+    **Stop Loss to Breakeven**:
+        When enabled (stops_order.sl_to_be=True), moves stop loss to
+        breakeven (or small profit) when price moves favorably by
+        sl_to_be_when_pct_from_avg_entry. Breakeven price accounts
+        for entry and exit fees to ensure zero loss.
+
+    **Trailing Stop Loss**:
+        When enabled, dynamically adjusts stop loss as price moves
+        favorably. Trails by tsl_trail_by_pct distance. Can be based
+        on high/low/open/close price depending on tsl_based_on setting.
+
+    **Trailing After Breakeven**:
+        If sl_to_be_then_trail=True, converts breakeven stop to
+        trailing stop after it's triggered, combining both features.
+
+    Examples
+    --------
+    >>> # Check for exits on current bar
+    >>> high, low, open_price, close = 51000, 49000, 50500, 50000
+    >>> order_result = OrderResult(
+    ...     average_entry=50000,
+    ...     sl_prices=49000,  # 2% stop loss
+    ...     tp_prices=52000,  # 4% take profit
+    ...     ...
+    ... )
+    >>> result = check_sl_tp_nb(
+    ...     high, low, open_price, close, 0, OrderType.LongEntry,
+    ...     0.001, 100, account_state, order_result, stops_order
+    ... )
+    >>> result.order_type  # OrderType.LongSL (stop loss triggered)
+    >>> result.price  # 49000 (exit at stop loss price)
+    """
     # Check SL
     moved_sl_to_be_new = order_result.moved_sl_to_be
     moved_tsl = False
