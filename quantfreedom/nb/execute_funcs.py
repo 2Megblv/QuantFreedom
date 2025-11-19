@@ -363,6 +363,137 @@ def process_order_nb(
     strat_records: Optional[RecordArray] = None,
     strat_records_filled: Optional[Array1d] = None,
 ) -> Tuple[AccountState, OrderResult]:
+    """
+    Process and execute an order by dispatching to appropriate position functions.
+
+    This is the main order execution dispatcher that routes order types to the
+    correct position management functions (long/short increase/decrease). It
+    handles both entry and exit orders, manages record keeping for completed
+    trades, and ensures proper account state updates.
+
+    The function acts as a central orchestrator, determining whether an order
+    is an entry (increase position) or exit (decrease position) and calling
+    the appropriate underlying function. For exits, it also triggers strategy
+    and order record filling.
+
+    Parameters
+    ----------
+    price : float
+        Execution price for the order
+    bar : int
+        Current bar index for record keeping
+    order_type : int
+        Order type from OrderType enum:
+        - LongEntry: Open/add to long position
+        - ShortEntry: Open/add to short position
+        - LongLiq/LongSL/LongTSL/LongTP: Close long position
+        - ShortLiq/ShortSL/ShortTSL/ShortTP: Close short position
+    entries_col : int
+        Entry signal column index for record keeping
+    order_settings_counter : int
+        Order settings index for record keeping
+    symbol_counter : int
+        Symbol index for multi-symbol backtests
+    account_state : AccountState
+        Current account state with balances
+    entry_order : EntryOrder
+        Entry order configuration (used for position increases)
+    order_result : OrderResult
+        Current order result with position details
+    static_variables_tuple : StaticVariables
+        Static backtest configuration
+    order_records : Optional[RecordArray], default None
+        Array for storing detailed order records. If provided, all filled
+        orders are logged with execution details.
+    order_records_id : Optional[Array1d], default None
+        Array tracking order record IDs (incremented for each record)
+    strat_records : Optional[RecordArray], default None
+        Array for storing strategy-level trade records. If provided,
+        completed trades (exits) are logged with PnL.
+    strat_records_filled : Optional[Array1d], default None
+        Array tracking number of strategy records filled
+
+    Returns
+    -------
+    account_state_new : AccountState
+        Updated account state after order execution
+    order_result_new : OrderResult
+        Updated order result with new position details, or exit details
+        if order was a close
+
+    Notes
+    -----
+    **Order Type Dispatch Logic**:
+        - LongEntry → long_increase_nb()
+        - ShortEntry → short_increase_nb()
+        - Long exits (Liq/SL/TSL/TP) → long_decrease_nb()
+        - Short exits (Liq/SL/TSL/TP) → short_decrease_nb()
+
+    **Exit Order Range Check**:
+        Long exits: OrderType.LongLiq (10) through OrderType.LongTSL (13)
+        Short exits: OrderType.ShortLiq (20) through OrderType.ShortTSL (23)
+        This range check handles all long/short exit types efficiently.
+
+    **Record Filling**:
+        - Strategy records: Filled only for exits (when fill_strat=True)
+          Contains PnL, equity, and trade metadata
+        - Order records: Filled for all successful orders (entries + exits)
+          Contains price, size, fees, and stop/target prices
+
+    **Record Conditionals**:
+        - Both records only filled if OrderStatus.Filled
+        - Strategy records only for completed trades (exits)
+        - Order records for any filled order
+
+    Examples
+    --------
+    >>> # Process long entry order
+    >>> account_state = AccountState(equity=1000.0, ...)
+    >>> entry_order = EntryOrder(leverage=10.0, ...)
+    >>> order_result = OrderResult()  # Empty for new position
+    >>> new_account, new_order = process_order_nb(
+    ...     price=50000.0,
+    ...     bar=100,
+    ...     order_type=OrderType.LongEntry,
+    ...     entries_col=0,
+    ...     order_settings_counter=0,
+    ...     symbol_counter=0,
+    ...     account_state=account_state,
+    ...     entry_order=entry_order,
+    ...     order_result=order_result,
+    ...     static_variables_tuple=static_vars,
+    ... )
+    >>> new_order.position  # New position size
+    >>> new_order.order_type  # OrderType.LongEntry
+
+    >>> # Process stop loss exit
+    >>> exit_order_result = OrderResult(
+    ...     position=1000.0,
+    ...     average_entry=50000.0,
+    ...     price=49000.0,  # SL triggered
+    ...     order_type=OrderType.LongSL,
+    ...     ...
+    ... )
+    >>> new_account, new_order = process_order_nb(
+    ...     price=49000.0,
+    ...     bar=150,
+    ...     order_type=OrderType.LongSL,
+    ...     ...,
+    ...     order_result=exit_order_result,
+    ...     strat_records=strat_array,  # Will be filled
+    ... )
+    >>> new_order.realized_pnl  # Loss from stop loss
+    >>> new_order.position  # 0 (closed)
+
+    See Also
+    --------
+    long_increase_nb : Increase long position
+    short_increase_nb : Increase short position
+    long_decrease_nb : Decrease long position
+    short_decrease_nb : Decrease short position
+    fill_order_records_nb : Fill order record details
+    fill_strat_records_nb : Fill strategy record details
+    """
     fill_strat = False
     if order_type == OrderType.LongEntry:
         account_state_new, order_result_new = long_increase_nb(

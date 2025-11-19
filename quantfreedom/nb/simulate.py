@@ -42,6 +42,151 @@ def backtest_df_only_nb(
     static_variables_tuple: StaticVariables,
     cart_array_tuple: Arrays1dTuple,
 ) -> Tuple[RecordArray, RecordArray]:
+    """
+    Run comprehensive multi-parameter backtest and return filtered strategy results.
+
+    This is the main backtesting engine that tests all combinations of symbols,
+    entry signals, and order parameters. It simulates bar-by-bar trading for each
+    combination, applying stop losses, take profits, and position management rules.
+    Only strategies that pass all filters (gains, total trades, equity curve quality)
+    are returned.
+
+    The function uses a triple nested loop structure:
+    - Outer: Iterate through symbols
+    - Middle: Iterate through indicator settings (entry signals)
+    - Inner: Iterate through order parameter combinations (cartesian product)
+
+    For each combination, it runs a complete bar-by-bar simulation from start to
+    finish, processing entries when signals trigger and managing exits via stops/targets.
+
+    Parameters
+    ----------
+    num_of_symbols : int
+        Number of symbols being backtested
+    total_indicator_settings : int
+        Number of different entry signal configurations per symbol
+    total_order_settings : int
+        Number of order parameter combinations (from cart_array_tuple)
+    total_bars : int
+        Number of price bars in the dataset
+    og_equity : float
+        Starting account equity for each strategy test
+    entries : PossibleArray
+        Boolean array of entry signals, shape (bars, signals_per_symbol * num_symbols).
+        True indicates an entry signal at that bar.
+    prices : PossibleArray
+        OHLC price data, shape (bars, 4 * num_symbols).
+        Format: [open, high, low, close] repeated for each symbol.
+    gains_pct_filter : float
+        Minimum profit percentage to include strategy in results.
+        Strategies below this threshold are discarded. Use -np.inf for no filter.
+    total_trade_filter : int
+        Minimum number of trades required to include strategy.
+        Strategies with fewer trades are discarded. Use 0 for no filter.
+    static_variables_tuple : StaticVariables
+        Static backtest configuration (fees, leverage mode, size type, etc.)
+    cart_array_tuple : Arrays1dTuple
+        Cartesian product of all order parameters to test:
+        leverage, size values/percentages, stop loss/take profit settings,
+        risk management parameters, etc.
+
+    Returns
+    -------
+    strategy_result_records : RecordArray
+        Array of strategy results that passed all filters, containing:
+        - gains_pct: Total profit percentage
+        - total_trades: Number of completed trades
+        - win_rate: Percentage of winning trades
+        - to_the_upside: R² metric for equity curve quality
+        - total_pnl: Total profit/loss in dollars
+        - avg_win, avg_loss: Average winning/losing trade sizes
+        - max_dd: Maximum drawdown percentage
+        - And other performance metrics
+    settings_result_records : RecordArray
+        Corresponding order settings for each strategy result, containing:
+        - symbol, entries_col: Strategy identifiers
+        - leverage, sl_pcts, tp_pcts: Position parameters
+        - size_pct, size_value: Sizing configuration
+        - All stop loss and trailing stop parameters
+        This allows reconstruction of exact strategy configuration.
+
+    Notes
+    -----
+    **Loop Structure**:
+        - Total combinations tested: num_symbols × indicator_settings × order_settings
+        - Each combination runs independent bar-by-bar simulation
+        - Account state reset for each combination
+
+    **Memory Optimization**:
+        Result array size is reduced by divide_records_array_size_by factor.
+        Only strategies passing all filters are kept, so array can be smaller
+        than total combinations when filters are strict.
+
+    **Filtering Pipeline** (in order):
+        1. **Gains filter**: gains_pct > gains_pct_filter
+        2. **Trade count filter**: total_trades > total_trade_filter
+        3. **Equity curve filter**: to_the_upside > upside_filter (R² metric)
+        Only strategies passing all three filters are included in results.
+
+    **Bar-by-Bar Simulation**:
+        For each bar:
+        1. Check for entry signal (entries array)
+        2. If entry, call process_order_nb() to open/add to position
+        3. If in position, call check_sl_tp_nb() to check exits
+        4. If exit triggered, call process_order_nb() to close position
+        5. Track all trades in strat_records for performance calculation
+
+    **Early Termination**:
+        Simulation stops early if available_balance < 5 (account blown up)
+
+    **Price Data Format**:
+        Prices array columns for each symbol: [open, high, low, close]
+        Example for 2 symbols: [open1, high1, low1, close1, open2, high2, low2, close2]
+
+    **Performance Calculation**:
+        After simulation completes, calculates:
+        - Win rate from completed trades
+        - Total PnL, average win/loss
+        - To-the-upside (R²) via linear regression on cumulative PnL
+        - Maximum drawdown from equity curve
+
+    Examples
+    --------
+    >>> # Backtest 1 symbol with 10 indicators and 100 order combinations
+    >>> prices = np.array(...)  # Shape: (1000 bars, 4)
+    >>> entries = np.array(...)  # Shape: (1000 bars, 10)
+    >>> static_vars = static_var_checker_nb(...)
+    >>> cart_arrays = create_cart_product_nb(...)  # 100 combinations
+    >>>
+    >>> strat_results, settings = backtest_df_only_nb(
+    ...     num_of_symbols=1,
+    ...     total_indicator_settings=10,
+    ...     total_order_settings=100,
+    ...     total_bars=1000,
+    ...     og_equity=1000.0,
+    ...     entries=entries,
+    ...     prices=prices,
+    ...     gains_pct_filter=10.0,  # Only strategies with 10%+ profit
+    ...     total_trade_filter=10,  # At least 10 trades
+    ...     static_variables_tuple=static_vars,
+    ...     cart_array_tuple=cart_arrays,
+    ... )
+    >>> # Results contain only strategies that:
+    >>> # - Made 10%+ profit
+    >>> # - Had 10+ trades
+    >>> # - Passed R² filter
+    >>> print(f"Tested: {1 * 10 * 100} combinations")
+    >>> print(f"Passed filters: {len(strat_results)} strategies")
+    >>> print(f"Best gain: {strat_results['gains_pct'].max():.2f}%")
+
+    See Also
+    --------
+    process_order_nb : Process individual order execution
+    check_sl_tp_nb : Check stop loss and take profit triggers
+    fill_strategy_result_records_nb : Fill strategy performance metrics
+    fill_settings_result_records_nb : Fill strategy parameter settings
+    get_to_the_upside_nb : Calculate R² equity curve metric
+    """
     # Creating strat records
     array_size = int(
         num_of_symbols
