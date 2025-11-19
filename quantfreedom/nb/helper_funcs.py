@@ -1099,6 +1099,97 @@ def fill_order_records_nb(
     account_state: AccountState,
     order_result: OrderResult,
 ) -> RecordArray:
+    """
+    Fill a single order record with execution details.
+
+    This function populates one row of the order_records array with details about
+    an executed order (entry or exit). It captures the complete state of the order
+    including price, size, fees, PnL, and stop/target prices. The order_records_id
+    is incremented after filling to prepare for the next order.
+
+    This is called by process_order_nb() after each order execution to maintain
+    a complete audit trail of all trading activity.
+
+    Parameters
+    ----------
+    bar : int
+        Bar index (timestamp) when order was executed
+    order_records : RecordArray
+        Single record (row) from the order_records array to fill.
+        This is typically order_records[order_records_id[0]].
+    order_settings_counter : int
+        Index identifying which parameter combination is being tested
+    order_records_id : Array1d
+        Single-element array [current_id] tracking next record to fill.
+        Will be incremented by 1 after filling.
+    account_state : AccountState
+        Current account state after order execution (equity, balance, etc.)
+    order_result : OrderResult
+        Order execution result containing price, size, fees, PnL, stops, etc.
+
+    Returns
+    -------
+    RecordArray
+        The filled order_records row (same object passed in)
+
+    Notes
+    -----
+    **Record Fields Populated**:
+        - avg_entry: Average entry price for position
+        - bar: Timestamp (bar index) of execution
+        - equity: Account equity after order
+        - fees_paid: Fees charged for this order
+        - order_set_id: Parameter combination ID
+        - order_id: Unique sequential order ID
+        - order_type: Entry/exit type (LongEntry, ShortSL, etc.)
+        - price: Execution price
+        - real_pnl: Realized PnL (rounded to 4 decimals)
+        - size_value: Order size in dollars
+        - sl_prices: Stop loss price
+        - tp_prices: Take profit price
+        - tsl_prices: Trailing stop price
+
+    **Side Effects**:
+        order_records_id[0] is incremented by 1
+
+    **Usage Context**:
+        This function is called internally by process_order_nb() and
+        check_sl_tp_nb() whenever an order executes. Users typically don't
+        call this directly but instead receive the filled order_records array
+        as output from simulate_up_to_6_nb() or similar functions.
+
+    Examples
+    --------
+    >>> # Typical internal usage (simplified)
+    >>> order_records = np.empty(100, dtype=or_dt)
+    >>> order_records_id = np.array([0])
+    >>> account_state = AccountState(equity=1050.0, ...)
+    >>> order_result = OrderResult(
+    ...     price=50000.0,
+    ...     size_value=500.0,
+    ...     fees_paid=0.50,
+    ...     realized_pnl=50.0,
+    ...     ...
+    ... )
+    >>> fill_order_records_nb(
+    ...     bar=42,
+    ...     order_records=order_records[0],
+    ...     order_settings_counter=5,
+    ...     order_records_id=order_records_id,
+    ...     account_state=account_state,
+    ...     order_result=order_result,
+    ... )
+    >>> order_records[0]['bar']  # 42
+    >>> order_records[0]['price']  # 50000.0
+    >>> order_records[0]['real_pnl']  # 50.0
+    >>> order_records_id[0]  # 1 (incremented)
+
+    See Also
+    --------
+    fill_strat_records_nb : Fill strategy-level trade records
+    process_order_nb : Calls this function after order execution
+    check_sl_tp_nb : Calls this function for exit orders
+    """
     order_records["avg_entry"] = order_result.average_entry
     order_records["bar"] = bar
     order_records["equity"] = account_state.equity
@@ -1126,6 +1217,91 @@ def fill_strat_records_nb(
     strat_records: RecordArray,
     symbol_counter: int,
 ) -> RecordArray:
+    """
+    Fill a single strategy record with trade-level PnL and metadata.
+
+    This function populates one row of the strat_records array with details about
+    a completed trade. Unlike order_records which track individual order executions,
+    strat_records track complete round-trip trades (entry to exit) with realized PnL.
+
+    This is called by process_order_nb() when closing a position to record the
+    trade's profitability and context.
+
+    Parameters
+    ----------
+    entries_col : int
+        Entry signal column index (identifies which indicator generated the signal)
+    equity : float
+        Account equity after trade completion
+    order_settings_counter : int
+        Index identifying which order parameter combination was used
+    pnl : float
+        Realized profit/loss from the completed trade
+    strat_records_filled : Array1d
+        Single-element array [count] tracking how many records have been filled.
+        Will be incremented by 1 after filling.
+    strat_records : RecordArray
+        Single record (row) from the strat_records array to fill.
+        This is typically strat_records[strat_records_filled[0]].
+    symbol_counter : int
+        Index identifying which symbol was traded
+
+    Returns
+    -------
+    RecordArray
+        The filled strat_records row (same object passed in)
+
+    Notes
+    -----
+    **Record Fields Populated**:
+        - equity: Account equity after trade
+        - entries_col: Entry signal source
+        - or_set: Order settings ID
+        - symbol: Symbol counter
+        - real_pnl: Realized PnL (rounded to 4 decimals)
+
+    **Side Effects**:
+        strat_records_filled[0] is incremented by 1
+
+    **Trade vs Order Records**:
+        - **Order records**: One record per order execution (both entries and exits)
+        - **Strategy records**: One record per completed round-trip trade
+        - Order records track execution details; strategy records track profitability
+
+    **PnL Rounding**:
+        PnL is rounded to 4 decimal places to avoid floating-point precision issues
+        when calculating aggregate statistics.
+
+    **Usage Context**:
+        Called internally by process_order_nb() when an exit order closes a position.
+        Used by backtest_df_only_nb() to calculate strategy performance metrics
+        like win rate, total PnL, and to-the-upside R² values.
+
+    Examples
+    --------
+    >>> # Typical internal usage
+    >>> strat_records = np.empty(100, dtype=strat_records_dt)
+    >>> strat_records_filled = np.array([0])
+    >>> fill_strat_records_nb(
+    ...     entries_col=3,
+    ...     equity=1050.0,
+    ...     order_settings_counter=7,
+    ...     pnl=50.75,
+    ...     strat_records_filled=strat_records_filled,
+    ...     strat_records=strat_records[0],
+    ...     symbol_counter=0,
+    ... )
+    >>> strat_records[0]['real_pnl']  # 50.75
+    >>> strat_records[0]['equity']  # 1050.0
+    >>> strat_records[0]['entries_col']  # 3
+    >>> strat_records_filled[0]  # 1 (incremented)
+
+    See Also
+    --------
+    fill_order_records_nb : Fill order-level execution records
+    fill_strategy_result_records_nb : Fill aggregated strategy performance
+    process_order_nb : Calls this function when closing positions
+    """
     strat_records["equity"] = equity
     strat_records["entries_col"] = entries_col
     strat_records["or_set"] = order_settings_counter
@@ -1140,6 +1316,90 @@ def get_to_the_upside_nb(
     gains_pct: float,
     wins_and_losses_array_no_be: Array1d,
 ) -> float:
+    """
+    Calculate to-the-upside metric (R² of cumulative PnL regression).
+
+    This function computes a quality metric for the equity curve by fitting a linear
+    regression to the cumulative PnL and calculating the coefficient of determination
+    (R²). Higher R² values indicate smoother, more consistent profit growth. The sign
+    is inverted for losing strategies to distinguish them from winners.
+
+    The to-the-upside metric helps identify strategies with:
+    - Consistent profitability (high positive R²)
+    - Smooth equity curves (vs erratic/choppy PnL)
+    - Reliable edge (vs lucky streaks)
+
+    Parameters
+    ----------
+    gains_pct : float
+        Total profit percentage for the strategy.
+        Used to determine sign of result (positive for winners, negative for losers).
+    wins_and_losses_array_no_be : Array1d
+        Array of realized PnL values for completed trades, excluding breakeven trades (PnL = 0).
+        These are the individual trade profits/losses that will be analyzed.
+
+    Returns
+    -------
+    float
+        R² coefficient of determination for cumulative PnL linear regression.
+        - **Positive R² (0 to 1)**: Winning strategies (gains_pct > 0)
+          - Close to 1: Very smooth upward equity curve
+          - Close to 0: Erratic equity curve despite overall profit
+        - **Negative R² (0 to -1)**: Losing strategies (gains_pct <= 0)
+          - Negated to distinguish from winners
+          - More negative = smoother downward curve
+
+    Notes
+    -----
+    **Calculation Method**:
+        1. Create x-axis: [1, 2, 3, ..., n] for n trades
+        2. Create y-axis: Cumulative sum of PnL array
+        3. Fit linear regression: y_pred = b0 + b1 * x
+        4. Calculate R² = Σ(y_pred - y_mean)² / Σ(y - y_mean)²
+        5. Negate R² if gains_pct <= 0
+
+    **Interpretation**:
+        - **R² = 0.95**: 95% of PnL variance explained by linear trend (very smooth)
+        - **R² = 0.50**: 50% explained (moderate consistency)
+        - **R² = 0.10**: 10% explained (erratic, may be luck)
+        - **R² = -0.80**: Losing strategy with smooth decline
+
+    **Why Exclude Breakeven Trades**:
+        Breakeven trades (PnL = 0) don't contribute to cumulative growth and
+        can artificially inflate R² by adding flat segments. Excluding them
+        focuses the metric on actual profit/loss dynamics.
+
+    **Usage in Filtering**:
+        backtest_df_only_nb() uses this metric with upside_filter to exclude
+        strategies with low R² (erratic equity curves) even if profitable.
+
+    **Mathematical Background**:
+        R² measures goodness of fit for linear regression. High R² means
+        cumulative PnL follows a straight line, indicating consistent
+        per-trade profitability rather than dependence on a few outlier wins.
+
+    Examples
+    --------
+    >>> # Smooth winning strategy
+    >>> trades_smooth = np.array([10.0, 12.0, 11.0, 13.0, 10.0])
+    >>> r2_smooth = get_to_the_upside_nb(gains_pct=56.0, wins_and_losses_array_no_be=trades_smooth)
+    >>> r2_smooth  # ~0.98 (very high R²)
+
+    >>> # Erratic winning strategy
+    >>> trades_erratic = np.array([-5.0, -3.0, 80.0, -2.0, -4.0])  # One big win
+    >>> r2_erratic = get_to_the_upside_nb(gains_pct=66.0, wins_and_losses_array_no_be=trades_erratic)
+    >>> r2_erratic  # ~0.20 (low R², depends on luck)
+
+    >>> # Losing strategy
+    >>> trades_losing = np.array([-10.0, -8.0, -12.0, -9.0])
+    >>> r2_losing = get_to_the_upside_nb(gains_pct=-39.0, wins_and_losses_array_no_be=trades_losing)
+    >>> r2_losing  # Negative (e.g., -0.95 for smooth decline)
+
+    See Also
+    --------
+    fill_strategy_result_records_nb : Uses this metric in strategy results
+    backtest_df_only_nb : Filters strategies by upside_filter threshold
+    """
     x = np.arange(1, len(wins_and_losses_array_no_be) + 1)
     y = wins_and_losses_array_no_be.cumsum()
 
@@ -1177,6 +1437,95 @@ def fill_strategy_result_records_nb(
     total_trades: int,
     wins_and_losses_array_no_be: Array1d,
 ) -> RecordArray:
+    """
+    Fill strategy performance record with aggregated statistics.
+
+    This function calculates and populates a strategy result record with comprehensive
+    performance metrics including gains, win rate, total PnL, and to-the-upside R².
+    It aggregates data from individual trade records (strat_records) into a single
+    summary row for strategies that passed all filters.
+
+    This is called by backtest_df_only_nb() after a strategy passes all filters
+    (gains, trade count, R²) to record its performance metrics.
+
+    Parameters
+    ----------
+    gains_pct : float
+        Total profit percentage: ((final_equity - initial_equity) / initial_equity) × 100
+    strategy_result_records : RecordArray
+        Single record (row) from strategy_result_records array to fill.
+        This is typically strategy_result_records[result_records_filled].
+    temp_strat_records : Array1d
+        Array of strategy records (completed trades) for this strategy.
+        Subset of full strat_records array: strat_records[0:strat_records_filled[0]]
+    to_the_upside : float
+        R² metric for equity curve quality (from get_to_the_upside_nb)
+    total_trades : int
+        Total number of completed trades (including breakeven)
+    wins_and_losses_array_no_be : Array1d
+        Array of PnL values excluding breakeven trades (PnL != 0)
+
+    Returns
+    -------
+    RecordArray
+        The filled strategy_result_records row (same object passed in)
+
+    Notes
+    -----
+    **Record Fields Populated**:
+        - symbol: Symbol counter from first trade record
+        - entries_col: Entry signal column from first trade record
+        - or_set: Order settings counter from first trade record
+        - total_trades: Number of completed trades
+        - gains_pct: Total profit percentage
+        - win_rate: Percentage of winning trades (excluding breakeven)
+        - to_the_upside: R² equity curve metric
+        - total_pnl: Sum of all realized PnL values
+        - ending_eq: Final equity from last trade record
+
+    **Win Rate Calculation**:
+        - Only considers non-breakeven trades
+        - win_rate = (number of trades with PnL > 0) / (total non-BE trades) × 100
+        - Rounded to 2 decimal places
+        - Example: 7 wins, 3 losses → 70.00%
+
+    **Total PnL**:
+        Sum of all PnL values including breakeven trades (from temp_strat_records)
+
+    **Usage Context**:
+        Called by backtest_df_only_nb() in the filtering pipeline:
+        1. Check gains_pct > gains_pct_filter
+        2. Check total_trades > total_trade_filter
+        3. Calculate to_the_upside
+        4. Check to_the_upside > upside_filter
+        5. If all pass → call this function to record results
+
+    Examples
+    --------
+    >>> # After strategy passes all filters
+    >>> temp_strat_records = strat_records[0:10]  # 10 completed trades
+    >>> wins_and_losses = np.array([10, -5, 8, -3, 12, 15, -4, 9])  # Excluding BE
+    >>> strategy_result_records = np.empty(1, dtype=strat_df_array_dt)
+    >>> fill_strategy_result_records_nb(
+    ...     gains_pct=42.5,
+    ...     strategy_result_records=strategy_result_records[0],
+    ...     temp_strat_records=temp_strat_records,
+    ...     to_the_upside=0.87,
+    ...     total_trades=10,
+    ...     wins_and_losses_array_no_be=wins_and_losses,
+    ... )
+    >>> strategy_result_records[0]['gains_pct']  # 42.5
+    >>> strategy_result_records[0]['win_rate']  # 62.5 (5 wins / 8 trades)
+    >>> strategy_result_records[0]['total_trades']  # 10
+    >>> strategy_result_records[0]['to_the_upside']  # 0.87
+
+    See Also
+    --------
+    fill_settings_result_records_nb : Fill corresponding settings record
+    get_to_the_upside_nb : Calculate R² metric
+    fill_strat_records_nb : Fill individual trade records
+    backtest_df_only_nb : Uses this to store filtered results
+    """
     # win rate calc
     win_loss = np.where(wins_and_losses_array_no_be < 0, 0, 1)
     win_rate = round(np.count_nonzero(win_loss) / win_loss.size * 100, 2)
@@ -1205,6 +1554,101 @@ def fill_settings_result_records_nb(
     stops_order: StopsOrder,
     symbol_counter: int,
 ) -> RecordArray:
+    """
+    Fill settings record with order parameter configuration.
+
+    This function populates a settings result record with all the order parameters
+    used by a strategy that passed filters. It pairs with fill_strategy_result_records_nb()
+    to provide complete strategy information: performance metrics + exact configuration.
+
+    This allows reconstruction of successful strategies by storing which parameters
+    produced the results in the corresponding strategy_result_records row.
+
+    Parameters
+    ----------
+    entries_col : int
+        Entry signal column index (identifies which indicator was used)
+    entry_order : EntryOrder
+        Entry order configuration containing leverage, size, SL, TP, TSL settings
+    settings_result_records : RecordArray
+        Single record (row) from settings_result_records array to fill.
+        This is typically settings_result_records[result_records_filled].
+    stops_order : StopsOrder
+        Stop order configuration containing breakeven and trailing stop parameters
+    symbol_counter : int
+        Index identifying which symbol was traded
+
+    Returns
+    -------
+    RecordArray
+        The filled settings_result_records row (same object passed in)
+
+    Notes
+    -----
+    **Record Fields Populated** (percentages converted back to raw form):
+        - symbol: Symbol counter
+        - entries_col: Entry signal source
+        - leverage: Leverage multiplier
+        - max_equity_risk_pct: Max equity risk % (decimal × 100)
+        - max_equity_risk_value: Max equity risk value
+        - risk_rewards: Risk-reward ratio
+        - size_pct: Position size % (decimal × 100)
+        - size_value: Position size value
+        - sl_pcts: Stop loss % (decimal × 100)
+        - sl_to_be_based_on: Breakeven price basis
+        - sl_to_be_trail_by_when_pct_from_avg_entry: BE trailing % (decimal × 100)
+        - sl_to_be_when_pct_from_avg_entry: BE trigger % (decimal × 100)
+        - sl_to_be_zero_or_entry: Move SL to zero or entry
+        - tp_pcts: Take profit % (decimal × 100)
+        - tsl_based_on: TSL price basis
+        - tsl_pcts_init: TSL initial % (decimal × 100)
+        - tsl_trail_by_pct: TSL trailing % (decimal × 100)
+        - tsl_when_pct_from_avg_entry: TSL activation % (decimal × 100)
+
+    **Percentage Conversion**:
+        Internal decimal percentages are multiplied by 100 for human readability:
+        - Internal: 0.03 → Output: 3.0
+        - Internal: 0.15 → Output: 15.0
+
+    **Pairing with Strategy Results**:
+        Both arrays (strategy_result_records and settings_result_records) are
+        filled at the same index (result_records_filled), creating matched pairs:
+        - strategy_result_records[i]: Performance metrics
+        - settings_result_records[i]: Parameters that produced those metrics
+
+    **Usage Context**:
+        Called by backtest_df_only_nb() immediately after
+        fill_strategy_result_records_nb() to record the complete strategy definition.
+
+    Examples
+    --------
+    >>> # After recording strategy performance
+    >>> entry_order = EntryOrder(
+    ...     leverage=5.0,
+    ...     size_pct=0.10,  # 10% internal
+    ...     sl_pcts=0.03,   # 3% internal
+    ...     tp_pcts=0.06,   # 6% internal
+    ...     ...
+    ... )
+    >>> stops_order = StopsOrder(...)
+    >>> settings_result_records = np.empty(1, dtype=settings_array_dt)
+    >>> fill_settings_result_records_nb(
+    ...     entries_col=2,
+    ...     entry_order=entry_order,
+    ...     settings_result_records=settings_result_records[0],
+    ...     stops_order=stops_order,
+    ...     symbol_counter=0,
+    ... )
+    >>> settings_result_records[0]['leverage']  # 5.0
+    >>> settings_result_records[0]['size_pct']  # 10.0 (converted back)
+    >>> settings_result_records[0]['sl_pcts']  # 3.0 (converted back)
+    >>> settings_result_records[0]['tp_pcts']  # 6.0 (converted back)
+
+    See Also
+    --------
+    fill_strategy_result_records_nb : Fill corresponding performance record
+    backtest_df_only_nb : Uses this to store parameter configurations
+    """
     settings_result_records["symbol"] = symbol_counter
     settings_result_records["entries_col"] = entries_col
     settings_result_records["leverage"] = entry_order.leverage
@@ -1237,7 +1681,71 @@ def fill_settings_result_records_nb(
 
 @njit(cache=True)
 def to_1d_array_nb(var: PossibleArray) -> Array1d:
-    """Resize array to one dimension."""
+    """
+    Convert array of any shape to 1D array.
+
+    This utility function normalizes arrays to exactly 1 dimension, handling scalars,
+    1D arrays, and 2D column vectors. It's used extensively by create_1d_arrays_nb()
+    to ensure all order parameters are uniformly shaped before validation or
+    cartesian product generation.
+
+    Parameters
+    ----------
+    var : PossibleArray
+        Input array of any compatible shape:
+        - 0D (scalar): Will be expanded to [value]
+        - 1D (array): Returned as-is
+        - 2D (column vector): First column extracted
+
+    Returns
+    -------
+    Array1d
+        1D numpy array with dtype float64
+
+    Raises
+    ------
+    ValueError
+        If input is 2D with more than 1 column, or has more than 2 dimensions
+
+    Notes
+    -----
+    **Supported Input Shapes**:
+        - Scalar (0D): np.float64(5.0) → np.array([5.0])
+        - 1D array: np.array([1, 2, 3]) → np.array([1., 2., 3.])
+        - 2D column: np.array([[1], [2], [3]]) → np.array([1., 2., 3.])
+
+    **Unsupported Input Shapes**:
+        - 2D with multiple columns: np.array([[1, 2], [3, 4]]) → ValueError
+        - 3D or higher: ValueError
+
+    **Use Cases**:
+        - Normalizing user inputs (scalars, lists, arrays) to 1D format
+        - Preparing parameters for broadcasting or cartesian product
+        - Ensuring consistent array shapes for numba JIT compilation
+
+    Examples
+    --------
+    >>> # Scalar to 1D
+    >>> to_1d_array_nb(np.float64(5.0))
+    array([5.])
+
+    >>> # 1D array unchanged
+    >>> to_1d_array_nb(np.array([1.0, 2.0, 3.0]))
+    array([1., 2., 3.])
+
+    >>> # 2D column vector to 1D
+    >>> to_1d_array_nb(np.array([[1.0], [2.0], [3.0]]))
+    array([1., 2., 3.])
+
+    >>> # Invalid: 2D with multiple columns
+    >>> to_1d_array_nb(np.array([[1.0, 2.0], [3.0, 4.0]]))
+    ValueError: to 1d array problem
+
+    See Also
+    --------
+    to_2d_array_nb : Convert array to 2D
+    create_1d_arrays_nb : Uses this function to normalize all parameters
+    """
     if var.ndim == 0:
         return np.expand_dims(var, axis=0)
     if var.ndim == 1:
@@ -1249,6 +1757,85 @@ def to_1d_array_nb(var: PossibleArray) -> Array1d:
 
 @njit(cache=True)
 def to_2d_array_nb(var: PossibleArray, expand_axis: int = 1) -> Array2d:
+    """
+    Convert array of any shape to 2D array.
+
+    This utility function normalizes arrays to exactly 2 dimensions, handling scalars,
+    1D arrays, and existing 2D arrays. It provides flexible axis expansion for 1D inputs,
+    allowing creation of either row vectors (expand_axis=0) or column vectors (expand_axis=1).
+
+    Parameters
+    ----------
+    var : PossibleArray
+        Input array of any compatible shape:
+        - 0D (scalar): Will be expanded to [[value]]
+        - 1D (array): Will be expanded along specified axis
+        - 2D (array): Returned as-is
+    expand_axis : int, optional
+        Axis along which to expand 1D arrays (default: 1).
+        - expand_axis=0: Creates row vector [[a, b, c]]
+        - expand_axis=1: Creates column vector [[a], [b], [c]]
+
+    Returns
+    -------
+    Array2d
+        2D numpy array with dtype float64
+
+    Raises
+    ------
+    ValueError
+        If input has more than 2 dimensions
+
+    Notes
+    -----
+    **Supported Input Shapes**:
+        - **0D scalar**: np.float64(5.0) → np.array([[5.0]])
+        - **1D with axis=1**: [1, 2, 3] → [[1], [2], [3]] (column vector)
+        - **1D with axis=0**: [1, 2, 3] → [[1, 2, 3]] (row vector)
+        - **2D array**: Returned unchanged
+
+    **Unsupported Input Shapes**:
+        - 3D or higher: ValueError
+
+    **Axis Convention**:
+        Following numpy convention:
+        - axis=0: Vertical expansion (adds rows)
+        - axis=1: Horizontal expansion (adds columns)
+
+    **Use Cases**:
+        - Preparing data for matrix operations
+        - Ensuring consistent shapes for broadcasting
+        - Converting 1D parameter arrays to column/row vectors for concatenation
+
+    Examples
+    --------
+    >>> # Scalar to 2D
+    >>> to_2d_array_nb(np.float64(5.0))
+    array([[5.]])
+
+    >>> # 1D to column vector (default)
+    >>> to_2d_array_nb(np.array([1.0, 2.0, 3.0]))
+    array([[1.],
+           [2.],
+           [3.]])
+
+    >>> # 1D to row vector
+    >>> to_2d_array_nb(np.array([1.0, 2.0, 3.0]), expand_axis=0)
+    array([[1., 2., 3.]])
+
+    >>> # 2D array unchanged
+    >>> to_2d_array_nb(np.array([[1.0, 2.0], [3.0, 4.0]]))
+    array([[1., 2.],
+           [3., 4.]])
+
+    >>> # Invalid: 3D array
+    >>> to_2d_array_nb(np.array([[[1.0]]]))
+    ValueError: to 2d array problem
+
+    See Also
+    --------
+    to_1d_array_nb : Convert array to 1D
+    """
     if var.ndim == 0:
         return np.expand_dims(np.expand_dims(var, axis=0), axis=0)
     if var.ndim == 1:
