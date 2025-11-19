@@ -450,6 +450,190 @@ def simulate_up_to_6_nb(
     risk_rewards: PossibleArray = np.nan,
     tp_pcts: PossibleArray = np.nan,
 ) -> Tuple[RecordArray, RecordArray]:
+    """
+    Run a simple backtest with up to 6 parameter combinations and return order records.
+
+    This is a simplified simulation entry point designed for quick testing with a small
+    number of parameter variations. Unlike backtest_df_only_nb() which accepts pre-computed
+    cartesian products, this function takes individual parameters (scalars or arrays) and
+    handles validation, array creation, and broadcasting internally.
+
+    The function is limited to a maximum of 6 parameter combinations to keep memory usage
+    low and execution fast. For larger parameter sweeps, use backtest_df_only_nb() instead.
+
+    **Workflow**:
+        1. Validate static variables via static_var_checker_nb()
+        2. Create 1D arrays from parameters via create_1d_arrays_nb()
+        3. Validate parameter arrays via check_1d_arrays_nb()
+        4. Determine largest array size (max 6)
+        5. Broadcast all arrays to match largest size
+        6. Run bar-by-bar simulation for each parameter combination
+        7. Return order execution records
+
+    Parameters
+    ----------
+    entries : PossibleArray
+        Entry signals, shape (bars, 1) or (bars, combinations).
+        True indicates entry signal. Will be broadcast if shape[1] == 1.
+    prices : PossibleArray
+        OHLC price data, shape (bars, 4).
+        Columns: [open, high, low, close]
+    equity : float
+        Starting account equity
+    fee_pct : float
+        Trading fee percentage as decimal (e.g., 0.001 for 0.1%)
+    mmr_pct : float
+        Maintenance margin requirement percentage (used for liquidation calc)
+    lev_mode : int
+        Leverage mode: LeverageMode.ISOLATED or LeverageMode.LEAST_FREE_CASH_USED
+    order_type : int
+        Order type: OrderType.LongEntry or OrderType.ShortEntry
+    size_type : int
+        Position sizing type: SizeType.Amount, PercentOfAccount, RiskAmount, or RiskPercentOfAccount
+    leverage : PossibleArray, optional
+        Leverage multiplier(s). Scalar or array up to length 6. Default: np.nan
+    max_equity_risk_pct : PossibleArray, optional
+        Max equity risk percentage for RiskPercentOfAccount sizing. Default: np.nan
+    max_equity_risk_value : PossibleArray, optional
+        Max equity risk value for RiskAmount sizing. Default: np.nan
+    max_lev : float, optional
+        Maximum allowed leverage. Default: 100.0
+    max_order_size_pct : float, optional
+        Maximum order size as percentage of account. Default: 100.0
+    min_order_size_pct : float, optional
+        Minimum order size as percentage of account. Default: 0.01
+    max_order_size_value : float, optional
+        Maximum order size in dollars. Default: np.inf
+    min_order_size_value : float, optional
+        Minimum order size in dollars. Default: 1.0
+    size_pct : PossibleArray, optional
+        Size percentage for PercentOfAccount sizing. Default: np.nan
+    size_value : PossibleArray, optional
+        Size value for Amount sizing. Default: np.nan
+    sl_pcts : PossibleArray, optional
+        Stop loss percentage(s) from entry. Default: np.nan
+    sl_to_be : bool, optional
+        Enable stop loss to breakeven feature. Default: False
+    sl_to_be_based_on : PossibleArray, optional
+        Basis for breakeven calculation. Default: np.nan
+    sl_to_be_when_pct_from_avg_entry : PossibleArray, optional
+        Profit threshold to move SL to breakeven. Default: np.nan
+    sl_to_be_zero_or_entry : PossibleArray, optional
+        Move SL to zero or entry price. Default: np.nan
+    sl_to_be_then_trail : bool, optional
+        Enable trailing after breakeven. Default: False
+    sl_to_be_trail_by_when_pct_from_avg_entry : PossibleArray, optional
+        Trailing distance after breakeven triggered. Default: np.nan
+    tsl_pcts_init : PossibleArray, optional
+        Initial trailing stop loss distance. Default: np.nan
+    tsl_true_or_false : bool, optional
+        Enable trailing stop loss. Default: False
+    tsl_based_on : PossibleArray, optional
+        Price basis for TSL (high/low/close). Default: np.nan
+    tsl_trail_by_pct : PossibleArray, optional
+        Trailing percentage for TSL. Default: np.nan
+    tsl_when_pct_from_avg_entry : PossibleArray, optional
+        Profit threshold to activate TSL. Default: np.nan
+    risk_rewards : PossibleArray, optional
+        Risk-reward ratio for TP calculation. Default: np.nan
+    tp_pcts : PossibleArray, optional
+        Take profit percentage(s) from entry. Default: np.nan
+
+    Returns
+    -------
+    order_records : RecordArray
+        Array of all executed orders with fields:
+        - bar: Bar index when order executed
+        - order_type: Entry/exit type (LongEntry, ShortSL, etc.)
+        - price: Execution price
+        - position: Position size after order
+        - fees_paid: Fees for this order
+        - real_pnl: Realized PnL (for exit orders)
+        - equity: Account equity after order
+        - available_balance: Available balance after order
+        - And other order execution details
+
+    Raises
+    ------
+    ValueError
+        If more than one parameter array has size > 1 and sizes don't match
+    ValueError
+        If largest parameter array size exceeds 6 combinations
+
+    Notes
+    -----
+    **Parameter Broadcasting**:
+        - Scalar parameters are broadcast to all combinations
+        - Array parameters must either be size 1 or match largest array size
+        - Example: leverage=[2, 3, 5], sl_pcts=[0.02, 0.03, 0.05] → 3 combinations
+        - Example: leverage=2, sl_pcts=[0.02, 0.03, 0.05] → 3 combinations with lev=2
+        - Invalid: leverage=[2, 3], sl_pcts=[0.02, 0.03, 0.05] → Size mismatch error
+
+    **Memory Usage**:
+        Order records array size = total_bars × 2
+        This assumes ~2 orders per bar on average (entry + exit)
+
+    **Simulation Details**:
+        - Each parameter combination runs independently
+        - Account state resets for each combination
+        - Simulation stops if available_balance < 5 (blown account)
+        - All orders executed at open price of next bar
+        - Stop losses/take profits checked on OHLC of current bar
+
+    **Return Type Note**:
+        Function signature shows Tuple[RecordArray, RecordArray] for compatibility,
+        but currently only returns order_records (single RecordArray).
+        The second return value (strategy performance records) is commented out.
+
+    Examples
+    --------
+    >>> # Test 3 stop loss levels on BTCUSD
+    >>> prices = np.array(...)  # Shape: (1000 bars, 4)
+    >>> entries = np.array(...)  # Shape: (1000 bars, 1)
+    >>>
+    >>> order_records = simulate_up_to_6_nb(
+    ...     entries=entries,
+    ...     prices=prices,
+    ...     equity=10000.0,
+    ...     fee_pct=0.001,
+    ...     mmr_pct=0.01,
+    ...     lev_mode=LeverageMode.ISOLATED,
+    ...     order_type=OrderType.LongEntry,
+    ...     size_type=SizeType.PercentOfAccount,
+    ...     size_pct=np.array([0.10, 0.10, 0.10]),  # 10% of account each
+    ...     leverage=5.0,  # Broadcast to all 3
+    ...     sl_pcts=np.array([0.02, 0.03, 0.05]),  # Test 2%, 3%, 5% SL
+    ...     tp_pcts=0.10,  # 10% TP for all
+    ... )
+    >>> # Returns order records for 3 combinations
+    >>> print(f"Total orders executed: {len(order_records)}")
+
+    >>> # Test with multiple varying parameters (max 6 combinations)
+    >>> order_records = simulate_up_to_6_nb(
+    ...     entries=entries,
+    ...     prices=prices,
+    ...     equity=10000.0,
+    ...     fee_pct=0.001,
+    ...     mmr_pct=0.01,
+    ...     lev_mode=LeverageMode.ISOLATED,
+    ...     order_type=OrderType.ShortEntry,
+    ...     size_type=SizeType.RiskPercentOfAccount,
+    ...     max_equity_risk_pct=np.array([0.01, 0.02, 0.03]),  # Risk 1%, 2%, 3%
+    ...     leverage=np.array([3, 5, 10]),  # Varying leverage
+    ...     sl_pcts=np.array([0.02, 0.03, 0.05]),  # Varying SL
+    ...     risk_rewards=2.0,  # 2:1 RR for all
+    ... )
+    >>> # All arrays size 3, so broadcasts to 3 combinations
+
+    See Also
+    --------
+    backtest_df_only_nb : Full-scale backtesting with unlimited parameter combinations
+    static_var_checker_nb : Validates static backtest configuration
+    create_1d_arrays_nb : Creates parameter arrays from inputs
+    check_1d_arrays_nb : Validates parameter arrays
+    process_order_nb : Processes individual order execution
+    check_sl_tp_nb : Checks stop loss and take profit triggers
+    """
     open_prices = prices[:, 0]
     high_prices = prices[:, 1]
     low_prices = prices[:, 2]

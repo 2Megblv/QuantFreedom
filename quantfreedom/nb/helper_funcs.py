@@ -278,6 +278,115 @@ def create_1d_arrays_nb(
     tsl_when_pct_from_avg_entry,
     tp_pcts,
 ) -> Arrays1dTuple:
+    """
+    Convert order parameters to 1D arrays and apply percentage conversions.
+
+    This function takes individual order parameters (scalars, lists, or arrays) and
+    normalizes them into uniform 1D float arrays. It also converts percentage values
+    (which are expected as raw percentages like 10.0 for 10%) into decimal form
+    (0.10) for internal calculations.
+
+    This is a preprocessing step used by simulate_up_to_6_nb() to prepare parameters
+    before validation via check_1d_arrays_nb() or cartesian product generation via
+    create_cart_product_nb().
+
+    Parameters
+    ----------
+    leverage : scalar or array-like
+        Leverage multiplier(s)
+    max_equity_risk_pct : scalar or array-like
+        Max equity risk percentage(s). Will be divided by 100.
+    max_equity_risk_value : scalar or array-like
+        Max equity risk value(s) in dollars
+    risk_rewards : scalar or array-like
+        Risk-reward ratio(s) for TP calculation
+    size_pct : scalar or array-like
+        Position size percentage(s). Will be divided by 100.
+    size_value : scalar or array-like
+        Position size value(s) in dollars
+    sl_pcts : scalar or array-like
+        Stop loss percentage(s) from entry. Will be divided by 100.
+    sl_to_be_based_on : scalar or array-like
+        Price basis for breakeven calculation (SL_BE_or_Trail_BasedOn enum)
+    sl_to_be_trail_by_when_pct_from_avg_entry : scalar or array-like
+        Trailing distance after breakeven. Will be divided by 100.
+    sl_to_be_when_pct_from_avg_entry : scalar or array-like
+        Profit threshold to trigger breakeven. Will be divided by 100.
+    sl_to_be_zero_or_entry : scalar or array-like
+        Move SL to zero (0) or entry price (1)
+    tsl_pcts_init : scalar or array-like
+        Initial trailing stop distance. Will be divided by 100.
+    tsl_based_on : scalar or array-like
+        Price basis for TSL (SL_BE_or_Trail_BasedOn enum)
+    tsl_trail_by_pct : scalar or array-like
+        TSL trailing percentage. Will be divided by 100.
+    tsl_when_pct_from_avg_entry : scalar or array-like
+        Profit threshold to activate TSL. Will be divided by 100.
+    tp_pcts : scalar or array-like
+        Take profit percentage(s) from entry. Will be divided by 100.
+
+    Returns
+    -------
+    Arrays1dTuple
+        Named tuple containing all parameters as 1D float arrays with:
+        - Percentage values converted to decimals
+        - All arrays properly shaped via to_1d_array_nb()
+        - Ready for validation or cartesian product generation
+
+    Notes
+    -----
+    **Percentage Conversions** (divided by 100):
+        - max_equity_risk_pct: 2.0 → 0.02
+        - size_pct: 10.0 → 0.10
+        - sl_pcts: 3.0 → 0.03
+        - sl_to_be_trail_by_when_pct_from_avg_entry: 1.0 → 0.01
+        - sl_to_be_when_pct_from_avg_entry: 5.0 → 0.05
+        - tsl_pcts_init: 4.0 → 0.04
+        - tsl_trail_by_pct: 1.5 → 0.015
+        - tsl_when_pct_from_avg_entry: 3.0 → 0.03
+        - tp_pcts: 6.0 → 0.06
+
+    **No Conversion** (kept as-is):
+        - leverage, max_equity_risk_value, risk_rewards, size_value
+        - sl_to_be_based_on, sl_to_be_zero_or_entry, tsl_based_on
+
+    **Array Normalization**:
+        All parameters are converted to float and passed through to_1d_array_nb()
+        which handles scalar expansion and dimension normalization.
+
+    Examples
+    --------
+    >>> # Convert mixed scalar/array parameters
+    >>> arrays = create_1d_arrays_nb(
+    ...     leverage=np.array([2, 3, 5]),
+    ...     max_equity_risk_pct=2.0,  # 2% → 0.02
+    ...     max_equity_risk_value=np.nan,
+    ...     risk_rewards=2.0,
+    ...     size_pct=np.array([10, 20, 30]),  # 10%, 20%, 30% → 0.1, 0.2, 0.3
+    ...     size_value=np.nan,
+    ...     sl_pcts=3.0,  # 3% → 0.03
+    ...     sl_to_be_based_on=np.nan,
+    ...     sl_to_be_trail_by_when_pct_from_avg_entry=np.nan,
+    ...     sl_to_be_when_pct_from_avg_entry=np.nan,
+    ...     sl_to_be_zero_or_entry=np.nan,
+    ...     tsl_pcts_init=np.nan,
+    ...     tsl_based_on=np.nan,
+    ...     tsl_trail_by_pct=np.nan,
+    ...     tsl_when_pct_from_avg_entry=np.nan,
+    ...     tp_pcts=6.0,  # 6% → 0.06
+    ... )
+    >>> arrays.leverage  # array([2., 3., 5.])
+    >>> arrays.size_pct  # array([0.1, 0.2, 0.3])
+    >>> arrays.sl_pcts  # array([0.03])
+    >>> arrays.tp_pcts  # array([0.06])
+
+    See Also
+    --------
+    check_1d_arrays_nb : Validates the arrays created by this function
+    create_cart_product_nb : Creates cartesian product from these arrays
+    to_1d_array_nb : Reshapes individual arrays to 1D
+    simulate_up_to_6_nb : Uses this function to prepare parameters
+    """
     leverage_array = to_1d_array_nb(np.asarray(leverage, dtype=np.float_))
 
     max_equity_risk_pct_array = to_1d_array_nb(
@@ -364,6 +473,156 @@ def check_1d_arrays_nb(
     arrays_1d_tuple: Arrays1dTuple,
     static_variables_tuple: StaticVariables,
 ) -> None:
+    """
+    Validate order parameter arrays for consistency and correctness.
+
+    This function performs comprehensive validation of all order parameters after they
+    have been converted to 1D arrays by create_1d_arrays_nb(). It checks value ranges,
+    mutual exclusivity constraints, and ensures parameters are consistent with the
+    selected sizing mode, leverage mode, and risk management settings.
+
+    This is called after create_1d_arrays_nb() and before backtesting begins to catch
+    configuration errors early.
+
+    Parameters
+    ----------
+    arrays_1d_tuple : Arrays1dTuple
+        Named tuple containing all order parameters as 1D arrays
+        (leverage, size_pct, sl_pcts, tp_pcts, etc.)
+    static_variables_tuple : StaticVariables
+        Static backtest configuration (fee_pct, lev_mode, size_type, etc.)
+
+    Returns
+    -------
+    None
+        This function only validates; it raises errors on invalid input
+
+    Raises
+    ------
+    ValueError
+        **Size Validation**:
+        - size_value < 1 or > max_order_size_value or < min_order_size_value
+        - size_pct < 1 or > max_order_size_pct or < min_order_size_pct
+
+        **Stop Loss / Take Profit Validation**:
+        - sl_pcts is inf or < 0
+        - tsl_pcts_init is inf or < 0
+        - tp_pcts is inf or < 0
+
+        **Leverage Mode Validation**:
+        - lev_mode out of range or not finite
+        - When Isolated mode: leverage not between 1 and max_lev
+        - When LeastFreeCashUsed mode: leverage is not np.nan
+        - When LeastFreeCashUsed mode: both sl and tsl are nan (need one)
+
+        **Risk-Reward Validation**:
+        - risk_rewards is inf or < 0
+        - risk_rewards set but no sl_pcts or tsl_pcts_init
+        - risk_rewards set and tp_pcts also set (mutually exclusive)
+
+        **Risk-Based Sizing Validation**:
+        - max_equity_risk_pct is inf or < 0
+        - max_equity_risk_value is inf or < 0
+        - Both max_equity_risk_pct and max_equity_risk_value are set (mutually exclusive)
+        - Both size_value and size_pct are set (mutually exclusive)
+
+        **Size Type Validation**:
+        - order_type invalid or out of range
+        - SizeType.Amount: size_value is nan or < 1
+        - SizeType.PercentOfAccount: size_pct is nan
+        - SizeType.RiskAmount or RiskPercentOfAccount: no sl_pcts or tsl_pcts_init
+        - SizeType.RiskPercentOfAccount: size_pct is nan
+
+        **Stop Loss to Breakeven (sl_to_be) Validation**:
+        - sl_to_be_based_on not in valid range (0-3, see SL_BE_or_Trail_BasedOn enum)
+        - sl_to_be_trail_by_when_pct_from_avg_entry is inf or < 0
+        - sl_to_be_when_pct_from_avg_entry is inf or < 0
+        - sl_to_be_zero_or_entry not 0 or 1
+        - sl_to_be is False but sl_to_be_* parameters are set
+        - sl_to_be is True but required params missing (sl_to_be_based_on, etc.)
+        - sl_to_be_then_trail is True but sl_to_be is False
+
+        **Trailing Stop Loss (tsl) Validation**:
+        - tsl_based_on not in valid range (0-3)
+        - tsl_trail_by_pct is inf or < 0
+        - tsl_when_pct_from_avg_entry is inf or < 0
+        - tsl_true_or_false is False but tsl_* parameters are set
+        - tsl_true_or_false is True but required params missing
+
+    Notes
+    -----
+    **Validation Order**:
+        1. Size value/percentage range checks
+        2. SL/TP/TSL percentage range checks
+        3. Leverage mode compatibility
+        4. Risk-reward logic
+        5. Mutual exclusivity (risk_rewards vs tp_pcts, size_value vs size_pct, etc.)
+        6. Size type requirements
+        7. SL breakeven parameter consistency
+        8. TSL parameter consistency
+
+    **Mutual Exclusivity Rules**:
+        - Cannot set both max_equity_risk_pct and max_equity_risk_value
+        - Cannot set both size_value and size_pct
+        - Cannot set both risk_rewards and tp_pcts
+        - Cannot use LeastFreeCashUsed leverage mode without SL or TSL
+
+    **Size Type Requirements**:
+        - **Amount**: Requires size_value >= 1
+        - **PercentOfAccount**: Requires size_pct > 0
+        - **RiskAmount**: Requires sl_pcts or tsl_pcts_init
+        - **RiskPercentOfAccount**: Requires size_pct and (sl_pcts or tsl_pcts_init)
+
+    **Stop Loss to Breakeven Requirements**:
+        If sl_to_be=True, must provide:
+        - sl_to_be_based_on (price basis)
+        - sl_to_be_when_pct_from_avg_entry (profit trigger)
+        - sl_to_be_zero_or_entry (where to move SL)
+        - sl_pcts (initial SL distance)
+
+        If sl_to_be_then_trail=True, additionally requires:
+        - sl_to_be_trail_by_when_pct_from_avg_entry (trailing distance)
+
+    **Trailing Stop Loss Requirements**:
+        If tsl_true_or_false=True, must provide:
+        - tsl_based_on (price basis)
+        - tsl_trail_by_pct (trailing percentage)
+        - tsl_when_pct_from_avg_entry (activation trigger)
+        - tsl_pcts_init (initial distance)
+
+    Examples
+    --------
+    >>> # Valid configuration for risk-based sizing
+    >>> static_vars = StaticVariables(
+    ...     size_type=SizeType.RiskPercentOfAccount,
+    ...     lev_mode=LeverageMode.Isolated,
+    ...     ...
+    ... )
+    >>> arrays = Arrays1dTuple(
+    ...     leverage=np.array([5.0]),
+    ...     size_pct=np.array([0.02]),  # Risk 2% of account
+    ...     sl_pcts=np.array([0.03]),   # 3% stop loss
+    ...     tp_pcts=np.array([0.06]),   # 6% take profit
+    ...     ...
+    ... )
+    >>> check_1d_arrays_nb(arrays, static_vars)  # Passes validation
+    >>>
+    >>> # Invalid: risk-based sizing without SL
+    >>> bad_arrays = Arrays1dTuple(
+    ...     leverage=np.array([5.0]),
+    ...     size_pct=np.array([0.02]),
+    ...     sl_pcts=np.array([np.nan]),  # Missing SL!
+    ...     ...
+    ... )
+    >>> check_1d_arrays_nb(bad_arrays, static_vars)
+    ValueError: When using Risk Amount or Risk Percent of Account set a proper sl pct or tsl pct > 0
+
+    See Also
+    --------
+    create_1d_arrays_nb : Creates the arrays validated by this function
+    static_var_checker_nb : Validates static variables
+    simulate_up_to_6_nb : Uses this function for parameter validation
+    """
     if np.isfinite(arrays_1d_tuple.size_value).all():
         if arrays_1d_tuple.size_value.any() < 1:
             raise ValueError("size_value must be greater than 1.")
@@ -627,6 +886,108 @@ def check_1d_arrays_nb(
 def create_cart_product_nb(
     arrays_1d_tuple: Arrays1dTuple,
 ) -> Arrays1dTuple:
+    """
+    Generate cartesian product of all order parameter arrays.
+
+    This function takes validated 1D parameter arrays and creates a cartesian product,
+    producing all possible combinations of the input parameters. This is used for
+    exhaustive parameter sweep testing where every combination should be backtested.
+
+    For example, if testing 3 leverage values, 5 stop loss percentages, and 4 take
+    profit percentages, this creates 3 × 5 × 4 = 60 parameter combinations.
+
+    The function uses an efficient numba-compatible algorithm that avoids Python loops
+    and itertools, making it suitable for large parameter spaces.
+
+    Parameters
+    ----------
+    arrays_1d_tuple : Arrays1dTuple
+        Named tuple containing all order parameters as 1D arrays.
+        All arrays should already be validated via check_1d_arrays_nb().
+        Arrays can be different lengths - cartesian product handles this.
+
+    Returns
+    -------
+    Arrays1dTuple
+        Named tuple with same structure as input, but each array now has length
+        equal to the total number of combinations (product of all input array sizes).
+        Each position in the output arrays represents one complete parameter combination.
+
+    Notes
+    -----
+    **Cartesian Product Logic**:
+        Given input arrays of sizes [n₁, n₂, ..., nₖ], output arrays have size
+        n₁ × n₂ × ... × nₖ. The rightmost parameters vary fastest (inner loop).
+
+    **Example Combination Order**:
+        Input:
+        - leverage = [2, 5, 10]
+        - sl_pcts = [0.02, 0.03]
+        - (all other params single values)
+
+        Output indices:
+        - [0]: lev=2, sl=0.02
+        - [1]: lev=2, sl=0.03
+        - [2]: lev=5, sl=0.02
+        - [3]: lev=5, sl=0.03
+        - [4]: lev=10, sl=0.02
+        - [5]: lev=10, sl=0.03
+
+    **Memory Consideration**:
+        Output size = product of all input sizes. Large parameter sweeps can create
+        millions of combinations. Use divide_records_array_size_by in static_variables
+        to reduce memory usage when applying strict result filters.
+
+    **Implementation Details**:
+        - Uses numpy operations for efficiency under numba JIT compilation
+        - Two-pass algorithm: first fills columns, then replicates rows
+        - Avoids Python loops and itertools for numba compatibility
+        - Returns new Arrays1dTuple with cartesian product arrays
+
+    Examples
+    --------
+    >>> # Create cartesian product of 2 parameters
+    >>> import numpy as np
+    >>> arrays = Arrays1dTuple(
+    ...     leverage=np.array([2.0, 5.0]),
+    ...     max_equity_risk_pct=np.array([0.01]),
+    ...     max_equity_risk_value=np.array([np.nan]),
+    ...     risk_rewards=np.array([2.0]),
+    ...     size_pct=np.array([0.1, 0.2]),
+    ...     size_value=np.array([np.nan]),
+    ...     sl_pcts=np.array([0.03]),
+    ...     sl_to_be_based_on=np.array([np.nan]),
+    ...     sl_to_be_trail_by_when_pct_from_avg_entry=np.array([np.nan]),
+    ...     sl_to_be_when_pct_from_avg_entry=np.array([np.nan]),
+    ...     sl_to_be_zero_or_entry=np.array([np.nan]),
+    ...     tp_pcts=np.array([0.06]),
+    ...     tsl_based_on=np.array([np.nan]),
+    ...     tsl_pcts_init=np.array([np.nan]),
+    ...     tsl_trail_by_pct=np.array([np.nan]),
+    ...     tsl_when_pct_from_avg_entry=np.array([np.nan]),
+    ... )
+    >>> cart_product = create_cart_product_nb(arrays)
+    >>> # Result has 2 × 2 = 4 combinations:
+    >>> cart_product.leverage  # array([2., 2., 5., 5.])
+    >>> cart_product.size_pct  # array([0.1, 0.2, 0.1, 0.2])
+    >>> cart_product.sl_pcts   # array([0.03, 0.03, 0.03, 0.03])
+
+    >>> # Larger example with 3 varying parameters
+    >>> arrays_large = Arrays1dTuple(
+    ...     leverage=np.array([2.0, 5.0, 10.0]),      # 3 values
+    ...     size_pct=np.array([0.1, 0.2]),           # 2 values
+    ...     sl_pcts=np.array([0.02, 0.03, 0.05]),    # 3 values
+    ...     # ... rest single values ...
+    ... )
+    >>> cart_large = create_cart_product_nb(arrays_large)
+    >>> len(cart_large.leverage)  # 3 × 2 × 3 = 18 combinations
+
+    See Also
+    --------
+    create_1d_arrays_nb : Creates the input arrays
+    check_1d_arrays_nb : Validates arrays before cartesian product
+    backtest_df_only_nb : Uses cartesian product for parameter sweep
+    """
     # dtype_names = (
     #     'order_settings_id',
     #     'leverage',
