@@ -229,7 +229,7 @@ def create_1d_arrays_nb(
 def check_1d_arrays_nb(
     arrays_1d_tuple: Arrays1dTuple,
     static_variables_tuple: StaticVariables,
-):
+) -> None:
     if np.isfinite(arrays_1d_tuple.size_value).all():
         if arrays_1d_tuple.size_value.any() < 1:
             raise ValueError("size_value must be greater than 1.")
@@ -492,7 +492,7 @@ def check_1d_arrays_nb(
 @njit(cache=True)
 def create_cart_product_nb(
     arrays_1d_tuple: Arrays1dTuple,
-):
+) -> Arrays1dTuple:
     # dtype_names = (
     #     'order_settings_id',
     #     'leverage',
@@ -644,7 +644,7 @@ def fill_strat_records_nb(
 def get_to_the_upside_nb(
     gains_pct: float,
     wins_and_losses_array_no_be: Array1d,
-):
+) -> float:
     x = np.arange(1, len(wins_and_losses_array_no_be) + 1)
     y = wins_and_losses_array_no_be.cumsum()
 

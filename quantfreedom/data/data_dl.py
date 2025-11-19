@@ -2,7 +2,7 @@ import ccxt
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-from quantfreedom._typing import Union
+from quantfreedom._typing import Union, pdFrame
 from re import sub
 
 def data_download_from_ccxt(
@@ -14,7 +14,7 @@ def data_download_from_ccxt(
     drop_volume: bool = True,
     remove_rate_limit: bool = False,
     bars_per_loop: int = 200,
-):
+) -> pdFrame:
     """
     Function Name
     -------------

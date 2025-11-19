@@ -1,7 +1,7 @@
 import numpy as np
 
 from numba import njit
-from quantfreedom._typing import PossibleArray, Array1d, RecordArray
+from quantfreedom._typing import PossibleArray, Array1d, RecordArray, Tuple
 from quantfreedom.nb.execute_funcs import process_order_nb, check_sl_tp_nb
 from quantfreedom.nb.helper_funcs import (
     static_var_checker_nb,
@@ -41,7 +41,7 @@ def backtest_df_only_nb(
     # Tuples
     static_variables_tuple: StaticVariables,
     cart_array_tuple: Arrays1dTuple,
-) -> Array1d[Array1d, Array1d]:
+) -> Tuple[RecordArray, RecordArray]:
     # Creating strat records
     array_size = int(
         num_of_symbols
@@ -304,7 +304,7 @@ def simulate_up_to_6_nb(
     # Take Profit Params
     risk_rewards: PossibleArray = np.nan,
     tp_pcts: PossibleArray = np.nan,
-) -> tuple[Array1d, RecordArray]:
+) -> Tuple[RecordArray, RecordArray]:
     open_prices = prices[:, 0]
     high_prices = prices[:, 1]
     low_prices = prices[:, 2]

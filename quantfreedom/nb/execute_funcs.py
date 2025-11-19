@@ -13,6 +13,7 @@ from quantfreedom._typing import (
     RecordArray,
     Array1d,
     Optional,
+    Tuple,
 )
 from quantfreedom.enums.enums import (
     OrderType,
@@ -41,7 +42,7 @@ def check_sl_tp_nb(
     stops_order: StopsOrder,
     order_records_id: Optional[Array1d] = None,
     order_records: Optional[RecordArray] = None,
-):
+) -> OrderResult:
     # Check SL
     moved_sl_to_be_new = order_result.moved_sl_to_be
     moved_tsl = False
@@ -257,7 +258,7 @@ def process_order_nb(
     order_records_id: Optional[Array1d] = None,
     strat_records: Optional[RecordArray] = None,
     strat_records_filled: Optional[Array1d] = None,
-):
+) -> Tuple[AccountState, OrderResult]:
     fill_strat = False
     if order_type == OrderType.LongEntry:
         account_state_new, order_result_new = long_increase_nb(

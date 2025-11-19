@@ -12,6 +12,7 @@ from quantfreedom.nb.helper_funcs import (
 from quantfreedom._typing import (
     pdFrame,
     PossibleArray,
+    Tuple,
 )
 from quantfreedom.enums.enums import OrderType, SL_BE_or_Trail_BasedOn
 
@@ -61,7 +62,7 @@ def backtest_df_only(
     total_trade_filter: int = 0,
     divide_records_array_size_by: float = 1.0,  # between 1 and 1000
     upside_filter: float = -1.0,  # between -1 and 1
-) -> tuple[pdFrame, pdFrame]:
+) -> Tuple[pdFrame, pdFrame]:
     """
     Function Name
     -------------
