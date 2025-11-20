@@ -12,9 +12,10 @@ from plotly.subplots import make_subplots
 try:
     from dash_bootstrap_templates import load_figure_template
     load_figure_template("darkly")
-except ImportError:
-    # Gracefully handle missing dash-bootstrap-templates
+except (ImportError, ValueError, Exception):
+    # Gracefully handle missing or incompatible dash-bootstrap-templates
     # The dark theme is nice-to-have but not critical for functionality
+    # Known issue: dash-bootstrap-templates may have plotly version conflicts (heatmapgl)
     pass
 
 from quantfreedom.enums.enums import OrderType
