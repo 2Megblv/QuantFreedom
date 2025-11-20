@@ -7,7 +7,15 @@ from IPython import get_ipython
 from dash import Dash, dcc, html, dash_table
 from jupyter_dash import JupyterDash
 from plotly.subplots import make_subplots
-from dash_bootstrap_templates import load_figure_template
+
+# Optional: dash-bootstrap-templates for dark theme
+try:
+    from dash_bootstrap_templates import load_figure_template
+    load_figure_template("darkly")
+except ImportError:
+    # Gracefully handle missing dash-bootstrap-templates
+    # The dark theme is nice-to-have but not critical for functionality
+    pass
 
 from quantfreedom.enums.enums import OrderType
 from quantfreedom._typing import pdFrame, RecordArray
@@ -19,8 +27,6 @@ from quantfreedom.plotting.plot_helper_functions import (
 np.set_printoptions(formatter={"float_kind": "{:.2f}".format})
 
 pd.options.display.float_format = "{:,.2f}".format
-
-load_figure_template("darkly")
 dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
 try:
     shell = str(get_ipython())

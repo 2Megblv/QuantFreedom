@@ -29,11 +29,11 @@ def from_talib(
     Function Name
     -------------
     from_talib
-    
+
     Summary
     -------
     _summary_
-    
+
     Parameters
     ----------
     func_name : str
@@ -46,12 +46,27 @@ def from_talib(
         _description_
     combos : bool, False
         _description_
-    
+
     Returns
     -------
     pdFrame
         _description_
+
+    Raises
+    ------
+    ImportError
+        If TA-Lib is not installed. Install with: pip install TA-Lib
+        Note: TA-Lib requires a C library. See https://github.com/TA-Lib/ta-lib-python
     """
+    if not TALIB_AVAILABLE:
+        raise ImportError(
+            "TA-Lib is not installed. To use this function, install TA-Lib:\n"
+            "  pip install TA-Lib\n\n"
+            "Note: TA-Lib requires a system C library installation.\n"
+            "See: https://github.com/TA-Lib/ta-lib-python for installation instructions.\n\n"
+            "TA-Lib is optional for QuantFreedom. You can use the library without it."
+        )
+
     if all(x is None for x in (prices, indicator_data)):
         raise ValueError(
             f"You need to send either prices = pdFrame or indicator_data = pdFrame"
