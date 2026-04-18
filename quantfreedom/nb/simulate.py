@@ -554,7 +554,7 @@ def simulate_up_to_6_nb(
 
         # # win rate calc
         # win_loss = np.where(w_l_no_be < 0, 0, 1)
-        # win_rate = round(np.count_nonzero(win_loss) / win_loss.size * 100, 2)
+        # win_rate = round(np.count_nonzero(win_loss) / win_loss.size * 100, 2) if win_loss.size > 0 else 0.0
 
         # total_pnl = temp_order_records["real_pnl"][
         #     ~np.isnan(temp_order_records["real_pnl"])
