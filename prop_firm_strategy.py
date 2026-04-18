@@ -2,135 +2,187 @@ import numpy as np
 import pandas as pd
 from quantfreedom.base.base import backtest_df_only
 
-def create_mock_multi_asset_data(assets, periods=5000):
-    """
-    Creates mock 1-hour OHLC data for multiple assets with a DatetimeIndex.
-    """
-    np.random.seed(42)
-    # 1 Hour frequency
-    date_rng = pd.date_range(start='2023-01-01', periods=periods, freq='h')
+try:
+    import MetaTrader5 as mt5
+    MT5_AVAILABLE = True
+except ImportError:
+    MT5_AVAILABLE = False
 
+try:
+    import yfinance as yf
+    YF_AVAILABLE = True
+except ImportError:
+    YF_AVAILABLE = False
+
+def fetch_historical_data(assets):
+    """
+    Attempts to fetch 1-Hour data from MT5.
+    Falls back to yfinance if MT5 is unavailable (e.g. on Linux/Mac).
+    """
     all_prices = []
     cols = []
 
+    # 1. Try MetaTrader 5
+    if MT5_AVAILABLE:
+        print("Attempting to initialize MetaTrader 5...")
+        if mt5.initialize():
+            print("MT5 initialized successfully.")
+            timeframe = mt5.TIMEFRAME_H1
+            num_bars = 5000
+
+            success = True
+            df_index = None
+            for i, asset in enumerate(assets):
+                print(f"Fetching {asset} from MT5...")
+                # MT5 asset names might need exact broker matching (e.g., EURUSD.a)
+                rates = mt5.copy_rates_from_pos(asset, timeframe, 0, num_bars)
+                if rates is None or len(rates) == 0:
+                    print(f"Failed to fetch {asset} from MT5. Check symbol name or MT5 connection.")
+                    success = False
+                    break
+
+                df = pd.DataFrame(rates)
+                df['time'] = pd.to_datetime(df['time'], unit='s')
+                df.set_index('time', inplace=True)
+                df_index = df.index
+
+                asset_data = df[['open', 'high', 'low', 'close']].values
+                all_prices.append(asset_data)
+                cols.extend([(i, 'open'), (i, 'high'), (i, 'low'), (i, 'close')])
+
+            mt5.shutdown()
+
+            if success:
+                print("Successfully fetched all data from MT5.")
+                prices_data = np.hstack(all_prices)
+                prices_cols = pd.MultiIndex.from_tuples(cols)
+                prices = pd.DataFrame(prices_data, columns=prices_cols, index=df_index)
+                return prices
+        else:
+            print("MT5 initialization failed. Falling back...")
+    else:
+        print("MetaTrader5 package not found. Falling back...")
+
+    # 2. Fallback to yfinance
+    print("Falling back to yfinance for historical data...")
+    if not YF_AVAILABLE:
+        raise ImportError("yfinance is not installed. Please run: pip install yfinance")
+
+    yf_tickers = {
+        "GBPJPY": "GBPJPY=X",
+        "US30": "^DJI",      # Dow Jones Industrial Average
+        "OIL": "CL=F",       # Crude Oil Futures
+        "XAUUSD": "GC=F",    # Gold Futures
+        "DAX30": "^GDAXI",
+        "NASDAQ": "^IXIC",
+        "SPX": "^GSPC"
+    }
+
+    # yfinance 15m data is limited to max 60 days
+    print("Downloading 59 days of 15-minute data from yfinance...")
+    end_date = pd.Timestamp.now()
+    start_date = end_date - pd.Timedelta(days=59)
+
+    df_yf = yf.download(list(yf_tickers.values()), start=start_date, end=end_date, interval="15m", group_by='ticker', progress=False)
+
+    # Forward fill missing data across different session hours
+    df_yf.ffill(inplace=True)
+    df_yf.dropna(inplace=True)
+
     for i, asset in enumerate(assets):
-        returns = np.random.normal(0.0001, 0.005, periods)
-        close = 100 * np.cumprod(1 + returns)
-        high = close * (1 + np.abs(np.random.normal(0.002, 0.001, periods)))
-        low = close * (1 - np.abs(np.random.normal(0.002, 0.001, periods)))
-        open_price = np.roll(close, 1)
-        open_price[0] = 100
+        ticker = yf_tickers[asset]
+        open_col = df_yf[ticker]['Open'].values
+        high_col = df_yf[ticker]['High'].values
+        low_col  = df_yf[ticker]['Low'].values
+        close_col = df_yf[ticker]['Close'].values
 
-        asset_data = np.column_stack((open_price, high, low, close))
+        asset_data = np.column_stack((open_col, high_col, low_col, close_col))
         all_prices.append(asset_data)
-
-        # QuantFreedom requires (symbol_index, 'open'/'high'/'low'/'close')
         cols.extend([(i, 'open'), (i, 'high'), (i, 'low'), (i, 'close')])
 
     prices_data = np.hstack(all_prices)
     prices_cols = pd.MultiIndex.from_tuples(cols)
-    prices = pd.DataFrame(prices_data, columns=prices_cols, index=date_rng)
+    prices = pd.DataFrame(prices_data, columns=prices_cols, index=df_yf.index)
     return prices
 
 def apply_time_filter(entries_df: pd.DataFrame, datetime_index: pd.DatetimeIndex):
-    """
-    Blocks overnight and weekend trades.
-    London Open ~ 08:00
-    NY Close ~ 17:00
-    """
-    # Create mask for valid times
     valid_time = (datetime_index.hour >= 8) & (datetime_index.hour < 17)
-    # Mask for valid days (Monday=0, Sunday=6)
     valid_day = datetime_index.dayofweek < 5
-
-    # Combined mask
     valid_mask = valid_time & valid_day
 
-    # Apply mask to all columns in entries_df
     for col in entries_df.columns:
         entries_df[col] = entries_df[col] & valid_mask
-
     return entries_df
 
 def apply_correlation_filter(entries_df: pd.DataFrame, max_correlated=4):
-    """
-    Basic mock correlation filter: prevents entering if we already have
-    a high number of assets showing an entry signal simultaneously.
-    """
-    # Count how many entry signals are True in each row
     signal_counts = entries_df.sum(axis=1)
-
-    # If the number of simultaneous signals exceeds the limit, block all signals for that bar
     exceeds_limit = signal_counts > max_correlated
-
     for col in entries_df.columns:
         entries_df.loc[exceeds_limit, col] = False
-
     return entries_df
 
 def generate_signals(prices: pd.DataFrame, num_assets: int, lookback=20):
-    """
-    Generate entries based on Top/Bottom continuation/reversal logic.
-    Enter Long if price breaks above 20-period highest peak.
-    """
     entries_dict = {}
-
     for i in range(num_assets):
         close_prices = prices[(i, 'close')]
         highest_peak = close_prices.shift(1).rolling(window=lookback).max()
-
-        # Generate Long Entries
         entries_data = close_prices > highest_peak
-        entries_dict[(i, 0)] = entries_data # (symbol_index, entry_logic_index)
-
+        entries_dict[(i, 0)] = entries_data
     entries = pd.DataFrame(entries_dict, index=prices.index)
     entries.fillna(False, inplace=True)
     return entries
 
 def main():
-    print("--- Prop Firm Backtest Strategy Initialization ---")
+    assets = ["GBPJPY", "US30", "OIL", "XAUUSD", "DAX30", "NASDAQ", "SPX"]
+    prices = fetch_historical_data(assets)
 
-    assets = ["EURUSD", "GBPUSD", "USDJPY", "OIL", "XAUUSD", "DAX30", "NASDAQ", "SPX"]
-    print(f"Assets configured: {assets}")
+    if prices is None or prices.empty:
+        print("Failed to fetch data.")
+        return
 
-    prices = create_mock_multi_asset_data(assets, periods=5000)
     entries = generate_signals(prices, len(assets), lookback=20)
-
-    print("Applying Time Constraints (London 08:00 - NY 17:00, No Weekends)")
     entries = apply_time_filter(entries, prices.index)
-
-    print("Applying Correlation Constraints (Max 4 simultaneous entries)")
     entries = apply_correlation_filter(entries, max_correlated=4)
 
-    print("\nSimulating User Rules:")
-    print("- Target Daily Profit: 1-3%")
-    print("- Max Daily Loss Limit: 2%")
-    print("- Weekly Max Loss Limit: 5%")
-    print("Notice: The quantfreedom base engine simulates orders based on these risk parameters mapping.")
+    total_bars = len(prices)
+    # 15m data: 4 bars per hour, ~120 trading hours in a week = 480 bars per week
+    total_weeks = total_bars / 480.0
 
     try:
         strat_df, settings_df = backtest_df_only(
             prices=prices,
             entries=entries,
-            equity=100000.0,      # $100k Prop Firm Account
+            equity=100000.0,
             fee_pct=0.01,
             mmr_pct=0.01,
-            lev_mode=1,           # Least free cash used mode
-            order_type=0,         # Long
-            size_type=0,          # Amount
+            lev_mode=1,
+            order_type=0,
+            size_type=0,
             leverage=np.array([np.nan]),
+            max_equity_risk_pct=np.array([0.50]), # Increased to 0.5%
             size_pct=np.array([np.nan]),
-            size_value=np.array([10000.0]), # Trade size amount
-            sl_pcts=np.array([1.0]),  # 1% stop loss maps to 1% equity risk on $100k
-            risk_rewards=np.array([2.0]), # 1:2 Risk Reward (Aiming for 2% profit)
+            size_value=np.array([10000.0]),
+            sl_pcts=np.array([1.0]),
+            risk_rewards=np.array([2.4]),
         )
-        print("\nBacktest successful!")
-        print("\nTop Strategy Results:")
-        print(strat_df.head(5))
+
+        symbol_map = {str(i): asset for i, asset in enumerate(assets)}
+
+        print("\n--- Real Historical Data Weekly Returns ---")
+        print(f"Total simulated time span: ~{total_weeks:.1f} trading weeks ({total_bars} bars)")
+        print(f"Starting Equity: $100,000\n")
+
+        for index, row in strat_df.iterrows():
+            sym_idx = str(int(float(row['symbol'])))
+            asset_name = symbol_map.get(sym_idx, sym_idx)
+            total_pnl = float(row['total_pnl'])
+            avg_weekly_pnl = total_pnl / total_weeks if total_weeks > 0 else 0
+            avg_weekly_pct = (avg_weekly_pnl / 100000.0) * 100
+
+            print(f"Asset: {asset_name:8s} | Total PnL: ${total_pnl:9.2f} | Avg Weekly PnL: ${avg_weekly_pnl:7.2f} | Avg Weekly Return: {avg_weekly_pct:5.2f}%")
 
     except Exception as e:
         import traceback
-        print("\nError running backtest:")
         traceback.print_exc()
 
 if __name__ == "__main__":
