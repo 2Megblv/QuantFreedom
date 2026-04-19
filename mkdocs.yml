@@ -1,0 +1,67 @@
+site_name: QuantFreedom Docs
+remote_name: QuantFreedom
+repo_url: https://github.com/QuantFreedom/QuantFreedom
+
+theme:
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.path
+    - navigation.indexes
+  name: material
+  
+extra_css:
+  - stylesheets/extra.css
+  
+markdown_extensions:
+  - attr_list
+  - meta
+  - admonition
+  - def_list
+  - md_in_html
+  - tables
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.progressbar
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: Quant Freedom
+      repo: quantfreedom
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - pymdownx.highlight:
+      extend_pygments_lang:
+        - name: pycon3
+          lang: pycon
+          options:
+            python3: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+plugins:
+- search:
+- open-in-new-tab:
+- literate-nav:
+    nav_file: nav_file.md
+    implicit_index: false
+- redirects:
+    redirect_maps: 
+      'index.md': 'home/installation.md'
+
+- mkdocstrings:
+    handlers:
+      python:
+        paths: [.]
+        options:
+          show_source: false
+          line_length: 1
+          show_category_heading: true
+          docstring_style: numpy
+          show_signature_annotations: false
+          separate_signature: true
+          annotations_path: brief

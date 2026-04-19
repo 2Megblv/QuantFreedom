@@ -1,11 +1,7 @@
 {{! QF Docstring Template }}
-Function Name
--------------
-{{name}}
-
-Summary
--------
 {{summaryPlaceholder}}
+        
+[Video]()
 
 {{#parametersExist}}
 Parameters
@@ -15,7 +11,7 @@ Parameters
     {{descriptionPlaceholder}}
 {{/args}}
 {{#kwargs}}
-{{var}} : {{typePlaceholder}}, {{&default}}
+{{var}} : {{typePlaceholder}}
     {{descriptionPlaceholder}}
 {{/kwargs}}
 {{/parametersExist}}

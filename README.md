@@ -12,3 +12,8 @@ The goal of this EA is to pass and run on Prop Firm accounts.
 1. Define the trading logic and indicators to be used.
 2. Setup risk management rules (drawdown limits, position sizing) as required by Prop Firms.
 3. Plan the multi-asset architecture (handling multiple symbols from a single chart or running on multiple charts).
+I am terrible at updating this readme file so please go to the website for installation instructions beyond pip install
+https://quantfreedom.github.io/QuantFreedom/
+```
+pip install quantfreedom
+```

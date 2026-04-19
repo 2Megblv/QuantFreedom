@@ -1,65 +1,114 @@
-currently working on:
-    ☐ 
 
-Documentation:
-    ☐ plotly helper functions
-      ☐ fill_candle_trace_trades
-      ☐ cerate_candle_trace_trades_list
-    ☐ learn how to make it so that there are blocks of text that look like the python file in markdown text
-     
-Videos to make:
-    ☐ utils helpers generat candles
-    ☐ backtest_df_only
-    ☐ data_download
-    ☐ strat_dashboard
-    ☐ get_candle_trace_data
+multiprocessing:
+  ☐ change the for loops in backtester
 
-User Suggestions:
-    ☐ add sharpe ratio to dataframe results
+backtester: 
+  ☐ get rid of max account risk percent whatever
+  ☐ go through all the logging code and do 3 quotes instead of /n all over the place
+  ☐ investigage why i am even using avaiable balance over equity
 
-Next Verson:
-    ☐ create tabs in dashboard for multiple settings to look at
-    ☐ figure out how to share results like a screen shot of your dashboard
-    ☐ allow for there to be the ability to send the eval in the from talib so that it can do it all at once
-    ☐ create cart calc where the person can just copy paste their settings and get the number back as well as the number of cart times the number of ind settings ... then also include a number for total bars tested times number of order settings times number of ind settings make it a helper function because it will just print the results as the return
-    ☐ create base that returns entry settings using vbt indicator creation thing
-    ☐ once new window then make it so you can select from a max of 5 or 10 different reports
+beginners guide:
+  ☐ update the order and steps
+  ☐ creating repo and updating repo
 
-Plotly Dash:
-    ☐ make it so in the ind dict you only send the entries once
-    ☐ make it so that once you take profit or get stopped out the icon shows up because right now the tp isn't showing up
+bot:
+  ☐ firebase for the website https://firebase.google.com/
+  ☐ pip install aiogram
+  ☐ https://www.cloudflare.com/ vs amazon
 
-Python course:
-    ☐ watch some courses and make simple 1 or 2 min vids on the topic
-    ☐ find tips and tricks videos and make 1 or 2 min simple videos
+bybit exchange live:
+  ☐ add await functions to bybit live mode so that while you are waiting for the next candle ever 15 second you check to see if your stop loss and tp are still there
+  ✔ get_closed_pnl @done(24-01-08 06:41)
+  ✔ get_latest_pnl_result @done(24-01-08 06:42)
+  ✔ get_order_history @done(24-01-08 07:04)
+  ✔ get_filled_orders @done(24-01-08 07:05)
+  ✔ get_filled_order_by_order_id @done(24-01-08 07:13)
+  ✔ check_if_order_filled @done(24-01-08 07:17)
+  ✔ cancel_all_open_orders_per_symbol @done(24-01-08 07:27)
+  ✔ set_leverage @done(24-01-08 08:14)
+  ✔ set_leverage_mode @done(24-01-08 08:14)
+  ✔ check_if_order_open @done(24-01-08 08:27)
+  ✔ adjust_order @done(24-01-08 12:50)
+  ✔ move_stop_order @done(24-01-09 06:25)
+  ✔ get_open_order_by_order_id @done(24-01-09 06:29)
+  ✔ get_risk_limit_info @done(24-01-09 07:11)
+  ✔ set_position_mode @done(24-01-09 07:18)
+  ✔ __get_mmr_pct @done(24-01-09 07:28)
+  ✔ get_all_symbols_info @done(24-01-09 07:57)
+  ✔ __get_min_max_leverage_and_asset_size @done(24-01-09 07:57)
+  ✔ get_symbol_trading_fee_rates @done(24-01-09 08:04)
+  ✔ __get_fee_pcts @done(24-01-09 08:04)
+  ✔ set_leverage_mode_cross @done(24-01-09 08:38)
+  ✔ set_leverage_mode_isolated @done(24-01-09 08:39)
+  ✔ set_position_mode_as_one_way_mode @done(24-01-09 08:39)
+  ✔ set_position_mode_as_hedge_mode @done(24-01-09 08:39)
+  ✔ set_exchange_settings @done(24-01-09 08:42)
 
-Numba:
-    ☐ see if you can repurpose cart array when using numba for df cart array
-    ☐ Does disabling cache=True in your application change anything?
+Update Backtester:
+  ✔ fix since_date and until_date @done(23-12-08 13:08)
+  ☐ fix shorting
+  ☐ update candles doc strings
 
-TODOs:
-    ☐ there seems no point of having the final array in simulate 6 because all we need is or so we can plot ... the finaly arrray is the same info from the df array that we already made so doesn't seem like there is a point.
-    ☐ make a grpah that takes the to the upside score and the gains percent and sets those as x and y values and graphs them as scatter plots so i cna see which one has the best of both worlds ... this would be for the DF
-    ☐ make replay_trade_plotter work with order records
-    ☐ make dl bar more accurate by doing math to figure out how many candles are within the amount of time we are trying to download
-    ☐ make it so leverage goes to 100 when sl or tsl moves past entry and liq price is maxed out
-    ☐ figure out a way to filter the true and false for stops and trails
-    ☐ allow for different fees for different coins
-    ☐ create a slippage function thing that is a random number gen between something and something and then let the user to set a random slippage percent when the random num gets hit
-    ☐ after you get your true and false entry and exit signals allow them to create an array of slippage associated with 
-    ☐ add back in slippage that auto adds slippage at a small slippage to all trades
-    ☐ slipage should be plus minus
+Numba Updates:
+  ☐ update numba with tv indicators
+  ☐ update numba simulate
+  ☐ add nothing tp and provided tp
 
-Other Users Needed:
-    ☐ check on seeing if the deletion of numba cache works on other peoples comps
+beginner videos:
+  ☐ 
 
-Ask Other Users ?:
-    ☐ add the ability to put user defined sl tp tsl prices
+general quality of life:
+  ☐ figure out what to do with the get_risk_limit_info because you need to match up the risk limit with the position info to pick the right risk limit info ... and then risk limit info needs to return both the buy risk limit and sell risk limit info
+  ☐ add something to catch if the person has no previous pnl history
 
-Would Be Nice:
-    ☐ send pct change of position in order result when decreasing or increaseing position size
+Videos:
+  ✔ ATR video on func and plot @done(23-11-27 17:32)
+  ✔ RSI video on func and plot @done(23-11-27 17:32)
+  ✔ linear regression candles @done(23-11-30 11:14)
+  ✔ SMA video on func and plot @done(23-12-08 13:08)
+  ☐ EMA video on func and plot
+  ☐ VWAP video on func and plot
+  ☐ MACD video on func and plot
+  ☐ BB video on func and plot ... fix plotting because of new return
+  ☐ Super Trend video on func and plot ... fix plotting because of new return
+  ☐ squeeze lazybear video on func and plot ... put crosses on lazybear plot
 
-merge dev into main
-git merge main
-git checkout main
-git merge dev
+Archive:
+  ✔ RMA video on func and plot @done(23-11-22 13:00)
+  ✔ WMA video on func and plot @done(23-11-18 08:34)
+  ✔ STDEV video on func and plot @done(23-11-19 14:22)
+  ✔ fix strategy to work with backtest @done(23-11-14 17:19)
+  ✔ fix dynamic order settings @done(23-11-14 17:19)
+  ✔ fix run_df_backtest to work with new strategy, dynamic, and starting bar @done(23-11-14 17:19)
+  ✔ fix or_backtest to work with new strategy, dynamic, and starting bar @done(23-11-14 17:19)
+  ✔ plot for wma @done(23-11-13 10:07)
+  ✔ add supertrend @done(23-11-13 10:06)
+  ✔ plot for supertrend @done(23-11-13 10:06)
+  ✔ add macd @done(23-11-13 07:05)
+  ✔ plot for macd @done(23-11-13 10:06)
+  ✔ fix len adder sma @done(23-11-11 17:39)
+  ✔ fix len adder ema @done(23-11-11 17:39)
+  ✔ fix len adder rma @done(23-11-11 17:39)
+  ✔ fix len adder rma2 @done(23-11-11 17:39)
+  ✔ fix len adder wma @done(23-11-11 17:39)
+  ✔ video on how to plot candlesticks @done(23-11-12 08:07)
+  ✔ add wma @done(23-11-10 17:07)
+  ✔ video for plot for rma @done(23-11-10 17:06)
+  ✔ fix mufex to be able to send None values as params @done(23-11-10 08:20)
+  ✔ fix live mufex @done(23-11-10 08:20)
+  ✔ create result plot @done(23-11-09 08:21)
+  ✔ plot for rma @done(23-11-09 06:20)
+  ✔ plot for rsi @done(23-11-09 06:20)
+  ✔ plot for sma @done(23-11-09 06:20)
+  ✔ plot for ema @done(23-11-09 06:20)
+  ✔ plot for atr @done(23-11-09 06:20)
+  ✔ plot for stdev @done(23-11-09 06:20)
+  ✔ plot for bollingerbands @done(23-11-09 06:20)
+  ✔ change mufex to be able to download candles with no api keys @done(23-11-08 14:21)
+  ✔ make a function that turns np candles to pandas df @done(23-11-08 14:22)
+  ✔ download binance candles @done(23-11-08 10:58)
+  ✔ download apex candles @done(23-11-08 10:58)
+  ✔ set video to go live today @done(23-11-08 06:50)
+  ✔ set video to go live tomorrow @done(23-11-08 06:50)
+  ✔ get binance to work with placing trade on testnet @done(23-11-08 06:50)
+  ✔ create bollineger bands @done(23-11-08 06:50)
