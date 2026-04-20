@@ -1,0 +1,152 @@
+CEngine.mqh			
+CSymbolManager.mqh			
+SSymbolConfig.mqh			
+CGlobalInputs.mqh			
+mismatched #ifdef/#endif pair	CSymbolManager.mqh	131	1
+CSweepStatePersistence.mqh			
+CRiskManager.mqh			
+CPortfolioRisk.mqh			
+CIndicatorManager.mqh			
+mismatched #ifdef/#endif pair	CIndicatorManager.mqh	242	1
+CExecution.mqh			
+CMemoryMonitor.mqh			
+CAsianBreakout.mqh			
+CStrategyBase.mqh			
+CVWAPReversion.mqh			
+CVolatilityMomentum.mqh			
+CDashboard.mqh			
+variable already defined	CGlobalInputs.mqh	15	16
+   see declaration of variable 'Inp_MagicNumber'	MultiAsset_EA_Pro2.0.mq5	16	16
+idenfitier 'Inp_MagicNumber' already used	MultiAsset_EA_Pro2.0.mq5	16	16
+   see declaration of variable 'Inp_MagicNumber'	MultiAsset_EA_Pro2.0.mq5	16	16
+variable already defined	CGlobalInputs.mqh	19	16
+   see declaration of variable 'Inp_EngineSymbols'	MultiAsset_EA_Pro2.0.mq5	17	16
+idenfitier 'Inp_EngineSymbols' already used	MultiAsset_EA_Pro2.0.mq5	17	16
+   see declaration of variable 'Inp_EngineSymbols'	MultiAsset_EA_Pro2.0.mq5	17	16
+variable already defined	CGlobalInputs.mqh	33	16
+   see declaration of variable 'Inp_EnableTradeLogging'	MultiAsset_EA_Pro2.0.mq5	18	16
+idenfitier 'Inp_EnableTradeLogging' already used	MultiAsset_EA_Pro2.0.mq5	18	16
+   see declaration of variable 'Inp_EnableTradeLogging'	MultiAsset_EA_Pro2.0.mq5	18	16
+variable already defined	CGlobalInputs.mqh	54	16
+   see declaration of variable 'Inp_ToxicityMultiplier'	MultiAsset_EA_Pro2.0.mq5	25	16
+idenfitier 'Inp_ToxicityMultiplier' already used	MultiAsset_EA_Pro2.0.mq5	25	16
+   see declaration of variable 'Inp_ToxicityMultiplier'	MultiAsset_EA_Pro2.0.mq5	25	16
+variable already defined	CGlobalInputs.mqh	73	16
+   see declaration of variable 'Inp_SweepReclaim_BarsToWait'	MultiAsset_EA_Pro2.0.mq5	29	16
+idenfitier 'Inp_SweepReclaim_BarsToWait' already used	MultiAsset_EA_Pro2.0.mq5	29	16
+   see declaration of variable 'Inp_SweepReclaim_BarsToWait'	MultiAsset_EA_Pro2.0.mq5	29	16
+variable already defined	CGlobalInputs.mqh	80	16
+   see declaration of variable 'Inp_Rule4_PartialClose_Pct'	MultiAsset_EA_Pro2.0.mq5	23	16
+idenfitier 'Inp_Rule4_PartialClose_Pct' already used	MultiAsset_EA_Pro2.0.mq5	23	16
+   see declaration of variable 'Inp_Rule4_PartialClose_Pct'	MultiAsset_EA_Pro2.0.mq5	23	16
+variable already defined	CGlobalInputs.mqh	82	16
+   see declaration of variable 'Inp_Rule5_ATRSpikeMultiplier'	MultiAsset_EA_Pro2.0.mq5	28	16
+idenfitier 'Inp_Rule5_ATRSpikeMultiplier' already used	MultiAsset_EA_Pro2.0.mq5	28	16
+   see declaration of variable 'Inp_Rule5_ATRSpikeMultiplier'	MultiAsset_EA_Pro2.0.mq5	28	16
+variable already defined	CGlobalInputs.mqh	84	16
+   see declaration of variable 'Inp_Rule6_MaxTimeOpen_Seconds'	MultiAsset_EA_Pro2.0.mq5	30	16
+idenfitier 'Inp_Rule6_MaxTimeOpen_Seconds' already used	MultiAsset_EA_Pro2.0.mq5	30	16
+   see declaration of variable 'Inp_Rule6_MaxTimeOpen_Seconds'	MultiAsset_EA_Pro2.0.mq5	30	16
+variable already defined	CGlobalInputs.mqh	86	16
+   see declaration of variable 'Inp_Rule8_FirstTP_Pct'	MultiAsset_EA_Pro2.0.mq5	21	16
+idenfitier 'Inp_Rule8_FirstTP_Pct' already used	MultiAsset_EA_Pro2.0.mq5	21	16
+   see declaration of variable 'Inp_Rule8_FirstTP_Pct'	MultiAsset_EA_Pro2.0.mq5	21	16
+variable already defined	CGlobalInputs.mqh	87	16
+   see declaration of variable 'Inp_Rule8_SecondTP_Pct'	MultiAsset_EA_Pro2.0.mq5	22	16
+idenfitier 'Inp_Rule8_SecondTP_Pct' already used	MultiAsset_EA_Pro2.0.mq5	22	16
+   see declaration of variable 'Inp_Rule8_SecondTP_Pct'	MultiAsset_EA_Pro2.0.mq5	22	16
+variable already defined	CGlobalInputs.mqh	90	16
+   see declaration of variable 'Inp_Rule10_TrailBase_Pips'	MultiAsset_EA_Pro2.0.mq5	27	16
+idenfitier 'Inp_Rule10_TrailBase_Pips' already used	MultiAsset_EA_Pro2.0.mq5	27	16
+   see declaration of variable 'Inp_Rule10_TrailBase_Pips'	MultiAsset_EA_Pro2.0.mq5	27	16
+variable already defined	CGlobalInputs.mqh	91	16
+   see declaration of variable 'Inp_Rule10_ATRMultiplier'	MultiAsset_EA_Pro2.0.mq5	26	16
+idenfitier 'Inp_Rule10_ATRMultiplier' already used	MultiAsset_EA_Pro2.0.mq5	26	16
+   see declaration of variable 'Inp_Rule10_ATRMultiplier'	MultiAsset_EA_Pro2.0.mq5	26	16
+variable already defined	CGlobalInputs.mqh	95	16
+   see declaration of variable 'Inp_Rule11_Trigger_Pct'	MultiAsset_EA_Pro2.0.mq5	24	16
+idenfitier 'Inp_Rule11_Trigger_Pct' already used	MultiAsset_EA_Pro2.0.mq5	24	16
+   see declaration of variable 'Inp_Rule11_Trigger_Pct'	MultiAsset_EA_Pro2.0.mq5	24	16
+variable already defined	CGlobalInputs.mqh	96	16
+   see declaration of variable 'Inp_Rule11_LockedProfit_Pips'	MultiAsset_EA_Pro2.0.mq5	31	16
+idenfitier 'Inp_Rule11_LockedProfit_Pips' already used	MultiAsset_EA_Pro2.0.mq5	31	16
+   see declaration of variable 'Inp_Rule11_LockedProfit_Pips'	MultiAsset_EA_Pro2.0.mq5	31	16
+variable already defined	CGlobalInputs.mqh	102	16
+   see declaration of variable 'Inp_HaltOnStateCorruption'	MultiAsset_EA_Pro2.0.mq5	37	16
+idenfitier 'Inp_HaltOnStateCorruption' already used	MultiAsset_EA_Pro2.0.mq5	37	16
+   see declaration of variable 'Inp_HaltOnStateCorruption'	MultiAsset_EA_Pro2.0.mq5	37	16
+'}' - expressions are not allowed on a global scope	CSymbolManager.mqh	129	1
+'n' - unexpected token, probably type is missing?	CPortfolioRisk.mqh	183	3
+'}' - semicolon expected	CPortfolioRisk.mqh	183	4
+'n' - unexpected token, probably type is missing?	CPortfolioRisk.mqh	183	7
+'n' - semicolon expected	CPortfolioRisk.mqh	183	9
+'public' - unexpected token, probably type is missing?	CMemoryMonitor.mqh	25	1
+'m_highWaterMark' - unexpected token, probably type is missing?	CMemoryMonitor.mqh	30	7
+variable already defined	CMemoryMonitor.mqh	30	7
+   see declaration of variable 'm_highWaterMark'	CMemoryMonitor.mqh	21	8
+idenfitier 'm_highWaterMark' already used	CMemoryMonitor.mqh	21	8
+   see declaration of variable 'm_highWaterMark'	CMemoryMonitor.mqh	21	8
+'m_alertTriggered' - unexpected token, probably type is missing?	CMemoryMonitor.mqh	31	7
+variable already defined	CMemoryMonitor.mqh	31	7
+   see declaration of variable 'm_alertTriggered'	CMemoryMonitor.mqh	22	9
+idenfitier 'm_alertTriggered' already used	CMemoryMonitor.mqh	22	9
+   see declaration of variable 'm_alertTriggered'	CMemoryMonitor.mqh	22	9
+'m_capacityThreshold' - unexpected token, probably type is missing?	CMemoryMonitor.mqh	32	7
+variable already defined	CMemoryMonitor.mqh	32	7
+   see declaration of variable 'm_capacityThreshold'	CMemoryMonitor.mqh	23	11
+idenfitier 'm_capacityThreshold' already used	CMemoryMonitor.mqh	23	11
+   see declaration of variable 'm_capacityThreshold'	CMemoryMonitor.mqh	23	11
+'}' - expressions are not allowed on a global scope	CMemoryMonitor.mqh	33	4
+'~' - expressions are not allowed on a global scope	CMemoryMonitor.mqh	36	4
+'}' - expressions are not allowed on a global scope	CMemoryMonitor.mqh	175	1
+'CMemoryMonitor' - struct undefined	CMemoryMonitor.mqh	178	11
+'=' - unexpected token	CMemoryMonitor.mqh	178	42
+'CMemoryMonitor' - unexpected token, probably type is missing?	CExecution.mqh	38	4
+'*' - semicolon expected	CExecution.mqh	38	18
+'CMemoryMonitor' - unexpected token, probably type is missing?	CExecution.mqh	77	4
+'*' - semicolon expected	CExecution.mqh	77	18
+name expected	CExecution.mqh	78	4
+'}' - expressions are not allowed on a global scope	CExecution.mqh	78	116
+'}' - expressions are not allowed on a global scope	CExecution.mqh	79	1
+undeclared identifier 'mday'	CSweepStatePersistence.mqh	38	24
+undeclared identifier 'mday'	CSweepStatePersistence.mqh	38	63
+undeclared identifier 'mday'	CSweepStatePersistence.mqh	38	91
+undeclared identifier 'sweep_detected'	CSweepStatePersistence.mqh	127	61
+undeclared identifier 'sweep_direction'	CSweepStatePersistence.mqh	128	63
+undeclared identifier 'sweep_bar_count'	CSweepStatePersistence.mqh	129	63
+undeclared identifier 'sweep_reclaimed'	CSweepStatePersistence.mqh	130	62
+undeclared identifier 'sweep_retouched'	CSweepStatePersistence.mqh	131	62
+undeclared identifier 'sweep_detected'	CSweepStatePersistence.mqh	192	11
+undeclared identifier 'sweep_direction'	CSweepStatePersistence.mqh	193	11
+undeclared identifier 'sweep_bar_count'	CSweepStatePersistence.mqh	194	11
+undeclared identifier 'sweep_reclaimed'	CSweepStatePersistence.mqh	195	11
+undeclared identifier 'sweep_retouched'	CSweepStatePersistence.mqh	196	11
+undeclared identifier 'sweep_detected'	CSweepStatePersistence.mqh	199	42
+undeclared identifier 'sweep_direction'	CSweepStatePersistence.mqh	200	37
+undeclared identifier 'sweep_bar_count'	CSweepStatePersistence.mqh	201	37
+undeclared identifier 'sweep_reclaimed'	CSweepStatePersistence.mqh	202	37
+undeclared identifier 'sweep_retouched'	CSweepStatePersistence.mqh	203	37
+undeclared identifier 'mday'	CSweepStatePersistence.mqh	236	24
+undeclared identifier 'mday'	CSweepStatePersistence.mqh	236	63
+undeclared identifier 'mday'	CSweepStatePersistence.mqh	236	91
+undeclared identifier 'MAX_ARRAY_SIZE'	CMemoryMonitor.mqh	45	21
+undeclared identifier 'MAX_ARRAY_SIZE'	CMemoryMonitor.mqh	45	48
+undeclared identifier 'MAX_ARRAY_SIZE'	CMemoryMonitor.mqh	83	10
+undeclared identifier 'MAX_ARRAY_SIZE'	CMemoryMonitor.mqh	84	50
+undeclared identifier 'MAX_ARRAY_SIZE'	CMemoryMonitor.mqh	93	10
+undeclared identifier 'MAX_ARRAY_SIZE'	CMemoryMonitor.mqh	94	62
+undeclared identifier 'MAX_ARRAY_SIZE'	CMemoryMonitor.mqh	111	50
+undeclared identifier 'MAX_ARRAY_SIZE'	CMemoryMonitor.mqh	143	45
+undeclared identifier 'MAX_ARRAY_SIZE'	CMemoryMonitor.mqh	144	46
+undeclared identifier 'm_memMonitor'	CExecution.mqh	405	7
+'!=' - illegal operation use	CExecution.mqh	405	20
+undeclared identifier 'm_memMonitor'	CExecution.mqh	407	7
+undeclared identifier 'm_memMonitor'	CExecution.mqh	94	4
+declaration without type	CExecution.mqh	94	23
+'CMemoryMonitor' - class type expected	CExecution.mqh	94	23
+cannot resolve function call 'CMemoryMonitor'	CExecution.mqh	94	23
+expression of 'void' type is illegal	CExecution.mqh	94	19
+'=' - illegal operation use	CExecution.mqh	94	17
+undeclared identifier 'm_memMonitor'	CExecution.mqh	112	7
+'!=' - illegal operation use	CExecution.mqh	112	20
+101 errors, 0 warnings		100	0
