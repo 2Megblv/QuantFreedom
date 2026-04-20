@@ -1,0 +1,45 @@
+MultiAsset_EA_Pro2.0.mq5			
+CGlobalInputs.mqh			
+CEngine.mqh			
+CSymbolManager.mqh			
+SSymbolConfig.mqh			
+mismatched #ifdef/#endif pair	CSymbolManager.mqh	130	1
+CSweepStatePersistence.mqh			
+CRiskManager.mqh			
+CPortfolioRisk.mqh			
+CIndicatorManager.mqh			
+CExecution.mqh			
+CMemoryMonitor.mqh			
+CAsianBreakout.mqh			
+CStrategyBase.mqh			
+CVWAPReversion.mqh			
+CVolatilityMomentum.mqh			
+CDashboard.mqh			
+'}' - expressions are not allowed on a global scope	CPortfolioRisk.mqh	184	1
+illegal assignment use	CMemoryMonitor.mqh	19	36
+undeclared identifier 'mday'	CSweepStatePersistence.mqh	38	24
+undeclared identifier 'mday'	CSweepStatePersistence.mqh	38	63
+undeclared identifier 'mday'	CSweepStatePersistence.mqh	38	91
+undeclared identifier 'sweep_detected'	CSweepStatePersistence.mqh	127	61
+undeclared identifier 'sweep_direction'	CSweepStatePersistence.mqh	128	63
+undeclared identifier 'sweep_bar_count'	CSweepStatePersistence.mqh	129	63
+undeclared identifier 'sweep_reclaimed'	CSweepStatePersistence.mqh	130	62
+undeclared identifier 'sweep_retouched'	CSweepStatePersistence.mqh	131	62
+undeclared identifier 'sweep_detected'	CSweepStatePersistence.mqh	192	11
+undeclared identifier 'sweep_direction'	CSweepStatePersistence.mqh	193	11
+undeclared identifier 'sweep_bar_count'	CSweepStatePersistence.mqh	194	11
+undeclared identifier 'sweep_reclaimed'	CSweepStatePersistence.mqh	195	11
+undeclared identifier 'sweep_retouched'	CSweepStatePersistence.mqh	196	11
+undeclared identifier 'sweep_detected'	CSweepStatePersistence.mqh	199	42
+undeclared identifier 'sweep_direction'	CSweepStatePersistence.mqh	200	37
+undeclared identifier 'sweep_bar_count'	CSweepStatePersistence.mqh	201	37
+undeclared identifier 'sweep_reclaimed'	CSweepStatePersistence.mqh	202	37
+undeclared identifier 'sweep_retouched'	CSweepStatePersistence.mqh	203	37
+undeclared identifier 'mday'	CSweepStatePersistence.mqh	236	24
+undeclared identifier 'mday'	CSweepStatePersistence.mqh	236	63
+undeclared identifier 'mday'	CSweepStatePersistence.mqh	236	91
+unresolved static variable 'CMemoryMonitor::MAX_ARRAY_SIZE'	CMemoryMonitor.mqh	46	21
+   see declaration of variable 'CMemoryMonitor::MAX_ARRAY_SIZE'	CMemoryMonitor.mqh	19	21
+undeclared identifier 'vwapSignal'	CStrategyBase.mqh	73	26
+undeclared identifier 'asianSignal'	CStrategyBase.mqh	74	26
+27 errors, 0 warnings		27	0
