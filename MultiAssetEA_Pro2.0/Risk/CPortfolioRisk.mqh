@@ -180,4 +180,7 @@ bool CPortfolioRisk::CanAddExposure(string symbol, int direction, double lotSize
    }
    
    return true; // All delta checks passed
-}\n};\n\n#endif
+}
+};
+
+#endif

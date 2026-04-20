@@ -15,8 +15,9 @@
 
 class CMemoryMonitor
 {
+public:
+   static const int MAX_ARRAY_SIZE = 100000;
 private:
-   static const int MAX_ARRAY_SIZE;  // Declared (will initialize outside class)
    int m_allocatedCount;                       // Current allocation count
    int m_highWaterMark;                        // Peak allocation ever reached
    bool m_alertTriggered;                      // Alert flag for >80% capacity
@@ -173,8 +174,5 @@ public:
          return StringFormat("✓ OK (%.1f%%)", GetUsagePercent());
    }
 };
-
-// MQL5 requires static const members to be initialized outside the class
-const int CMemoryMonitor::MAX_ARRAY_SIZE = 100000;
 
 #endif
