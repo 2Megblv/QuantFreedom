@@ -1,6 +1,9 @@
 //+------------------------------------------------------------------+
 //|                                               CSymbolManager.mqh |
 //+------------------------------------------------------------------+
+#ifndef GUARD_C_SYMBOL_MANAGER
+#define GUARD_C_SYMBOL_MANAGER
+
 #property strict
 
 #include <MultiAssetEA_Pro2.0/Core/SSymbolConfig.mqh>

@@ -35,7 +35,7 @@ private:
       
       string year = IntegerToString(dt.year);
       string month = (dt.mon < 10) ? ("0" + IntegerToString(dt.mon)) : IntegerToString(dt.mon);
-      string day = (dt.mday < 10) ? ("0" + IntegerToString(dt.mday)) : IntegerToString(dt.mday);
+      string day = (dt.day < 10) ? ("0" + IntegerToString(dt.day)) : IntegerToString(dt.day);
       
       return year + "-" + month + "-" + day;
    }
@@ -233,7 +233,7 @@ public:
       
       string year = IntegerToString(dt.year);
       string month = (dt.mon < 10) ? ("0" + IntegerToString(dt.mon)) : IntegerToString(dt.mon);
-      string day = (dt.mday < 10) ? ("0" + IntegerToString(dt.mday)) : IntegerToString(dt.mday);
+      string day = (dt.day < 10) ? ("0" + IntegerToString(dt.day)) : IntegerToString(dt.day);
       
       string yesterdayDate = year + "-" + month + "-" + day;
       
