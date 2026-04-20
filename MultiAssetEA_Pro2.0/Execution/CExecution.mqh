@@ -532,7 +532,8 @@ void CExecution::ClosePositionPartial(ulong ticket, double volume, ENUM_POSITION
    req.deviation = 20;
    req.comment = reason;
 
-   if(OrderSend(req, res) > 0)
+   bool sendResult = OrderSend(req, res);
+   if(sendResult)
    {
       // Bug fix: record only the proportional P&L for the slice being closed.
       // POSITION_PROFIT is the full open position P&L — for a partial close of
@@ -549,6 +550,14 @@ void CExecution::ClosePositionPartial(ulong ticket, double volume, ENUM_POSITION
       }
       else
          Print("CLOSE: ", symbol, " ", reason, " Profit: ", positionProfit);
+   }
+   else
+   {
+      int err = GetLastError();
+      // ERR_INVALID_VOLUME (4751) or ERR_INVALID_STOPS (4756)
+      // Volume errors happen if close slice volume is invalid.
+      // Often partial close percentages yield volumes that don't match the broker's SYMBOL_VOLUME_STEP.
+      Print("⚠️ ERROR closing partial volume ", volume, " for ", symbol, ": ", err);
    }
 }
 
@@ -628,11 +637,16 @@ void CExecution::ManageTickExits(CRiskManager* pRiskMgr, SIndicatorState &states
          // Without flags, every tick at TP75 would close another slice of the position.
          int recIdx = FindOrAddTPRecord(ticket, symbol);
 
+         double minLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+         double stepLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+
          if(hitTP75 && !m_orderRecords[recIdx].tp75Taken)
          {
             double pct = MathMin(100.0, MathMax(0.0, Inp_Rule8_SecondTP_Pct));
-            double closeVol = NormalizeDouble(vol * pct / 100.0, 2);
-            if(closeVol > 0)
+            double closeVol = NormalizeDouble(vol * (pct / 100.0), 2);
+            closeVol = MathRound(closeVol / stepLot) * stepLot; // Align to broker step
+
+            if(closeVol >= minLot && closeVol <= vol) // Cannot close less than minimum allowed by broker
             {
                ClosePositionPartial(ticket, closeVol, type, symbol, "RULE8_TP75", pRiskMgr);
                m_orderRecords[recIdx].tp75Taken = true;
@@ -641,8 +655,10 @@ void CExecution::ManageTickExits(CRiskManager* pRiskMgr, SIndicatorState &states
          else if(hitTP50 && !m_orderRecords[recIdx].tp50Taken)
          {
             double pct = MathMin(100.0, MathMax(0.0, Inp_Rule8_FirstTP_Pct));
-            double closeVol = NormalizeDouble(vol * pct / 100.0, 2);
-            if(closeVol > 0)
+            double closeVol = NormalizeDouble(vol * (pct / 100.0), 2);
+            closeVol = MathRound(closeVol / stepLot) * stepLot; // Align to broker step
+
+            if(closeVol >= minLot && closeVol <= vol)
             {
                ClosePositionPartial(ticket, closeVol, type, symbol, "RULE8_TP50", pRiskMgr);
                m_orderRecords[recIdx].tp50Taken = true;
@@ -727,8 +743,9 @@ void CExecution::ManageTickExits(CRiskManager* pRiskMgr, SIndicatorState &states
             }
             
             bool modify = false;
-            if(type == POSITION_TYPE_BUY && (sl == 0.0 || lockLevel > sl)) modify = true;
-            if(type == POSITION_TYPE_SELL && (sl == 0.0 || lockLevel < sl)) modify = true;
+            // Prevent attempting modifications if the target lockLevel is already applied or worse than current SL
+            if(type == POSITION_TYPE_BUY && (sl == 0.0 || lockLevel > sl + pointR11)) modify = true;
+            if(type == POSITION_TYPE_SELL && (sl == 0.0 || lockLevel < sl - pointR11)) modify = true;
             
             if(modify)
             {
@@ -736,8 +753,23 @@ void CExecution::ManageTickExits(CRiskManager* pRiskMgr, SIndicatorState &states
                ZeroMemory(req); ZeroMemory(res);
                req.action = TRADE_ACTION_SLTP;
                req.symbol = symbol; req.position = ticket; req.sl = lockLevel; req.tp = tp;
-               if(!OrderSend(req, res)) Print("⚠️ RULE11: TP-Prox Locked Profit Error: ", GetLastError());
-               else Print("🔒 RULE11: TP-Prox Lock-in [", symbol, "] Level: ", lockLevel);
+
+               // Avoid invalid stops error by re-verifying stops vs current ask/bid
+               double freezeLevel = SymbolInfoInteger(symbol, SYMBOL_TRADE_FREEZE_LEVEL) * pointR11;
+               bool isValid = true;
+               if(type == POSITION_TYPE_BUY && lockLevel >= tick.bid - freezeLevel - minDistPtsR11) isValid = false;
+               if(type == POSITION_TYPE_SELL && lockLevel <= tick.ask + freezeLevel + minDistPtsR11) isValid = false;
+
+               if(isValid)
+               {
+                  if(!OrderSend(req, res))
+                  {
+                     int err = GetLastError();
+                     // 4756 = ERR_TRADE_SEND_FAILED (often due to no change in SL/TP or too close to market)
+                     if(err != 4756) Print("⚠️ RULE11: TP-Prox Locked Profit Error: ", err);
+                  }
+                  else Print("🔒 RULE11: TP-Prox Lock-in [", symbol, "] Level: ", lockLevel);
+               }
             }
          }
       }
@@ -766,9 +798,17 @@ void CExecution::ManageBarExits(CRiskManager* pRiskMgr, SIndicatorState &indStat
       {
          if(indState.liveADX < Inp_Rule4_ADXDecliningThreshold && indState.liveADX < indState.liveADXPrev)
          {
+            double minLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+            double stepLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+
             double pct = MathMin(100.0, MathMax(0.0, Inp_Rule4_PartialClose_Pct));
-            double closeVol = NormalizeDouble(vol * pct / 100.0, 2);
-            if(closeVol > 0) ClosePositionPartial(ticket, closeVol, type, symbol, "RULE4_Divergence", pRiskMgr);
+            double closeVol = NormalizeDouble(vol * (pct / 100.0), 2);
+            closeVol = MathRound(closeVol / stepLot) * stepLot; // Align to broker step
+
+            if(closeVol >= minLot && closeVol <= vol)
+            {
+               ClosePositionPartial(ticket, closeVol, type, symbol, "RULE4_Divergence", pRiskMgr);
+            }
          }
       }
    }
