@@ -714,8 +714,17 @@ void CExecution::ManageTickExits(CRiskManager* pRiskMgr, SIndicatorState &states
                ZeroMemory(req); ZeroMemory(res);
                req.action = TRADE_ACTION_SLTP;
                req.symbol = symbol; req.position = ticket; req.sl = newSL; req.tp = tp;
-               if(!OrderSend(req, res) || res.retcode != TRADE_RETCODE_DONE)
-                  Print("⚠️ Trailing Stop Modify [", symbol, "] retcode=", res.retcode, " err=", GetLastError(), " newSL=", newSL);
+
+               double freezeLevel = SymbolInfoInteger(symbol, SYMBOL_TRADE_FREEZE_LEVEL) * point;
+               bool isValid = true;
+               if(type == POSITION_TYPE_BUY && newSL >= tick.bid - freezeLevel - minDistPts) isValid = false;
+               if(type == POSITION_TYPE_SELL && newSL <= tick.ask + freezeLevel + minDistPts) isValid = false;
+
+               if(isValid)
+               {
+                  if(!OrderSend(req, res) || res.retcode != TRADE_RETCODE_DONE)
+                     Print("⚠️ Trailing Stop Modify [", symbol, "] retcode=", res.retcode, " err=", GetLastError(), " newSL=", newSL);
+               }
             }
          }
       }
