@@ -126,6 +126,5 @@ void CSymbolManager::UpdateSymbolConfig(int index, SSymbolConfig &cfg)
    if(index >= 0 && index < m_count)
       m_symbols[index] = cfg;
 }
-};
 
 #endif

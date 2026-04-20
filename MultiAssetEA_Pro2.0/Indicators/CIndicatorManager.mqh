@@ -1,6 +1,9 @@
 //+------------------------------------------------------------------+
 //|                                            CIndicatorManager.mqh |
 //+------------------------------------------------------------------+
+#ifndef GUARD_C_INDICATOR_MANAGER
+#define GUARD_C_INDICATOR_MANAGER
+
 #property strict
 
 // Phase 1 FR-4 fix: Sentinel value for invalid indicator values

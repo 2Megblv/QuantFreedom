@@ -12,29 +12,10 @@
 //+------------------------------------------------------------------+
 //| INPUT PARAMETERS (must be in main .mq5, not in .mqh includes)
 //+------------------------------------------------------------------+
-input group "════════ MASTER SETTINGS ════════"
-input int      Inp_MagicNumber                    = 20250122; // Master Magic Number
-input string   Inp_EngineSymbols                  = "EURUSD,GBPUSD,XAUUSD,USDJPY,D30EUR,NASUSD,SPXUSD,USOUSD";
-input bool     Inp_EnableTradeLogging             = true;
 
-input group "════════ EXIT RULES ════════"
-input double   Inp_Rule8_FirstTP_Pct             = 0.25;
-input double   Inp_Rule8_SecondTP_Pct            = 0.50;
-input double   Inp_Rule4_PartialClose_Pct        = 0.50;
-input int      Inp_Rule11_Trigger_Pct             = 75;
-input double   Inp_ToxicityMultiplier             = 1.0;
-input double   Inp_Rule10_ATRMultiplier           = 2.0;
-input int      Inp_Rule10_TrailBase_Pips         = 10;
-input double   Inp_Rule5_ATRSpikeMultiplier       = 2.5;
-input int      Inp_SweepReclaim_BarsToWait       = 3;
-input int      Inp_Rule6_MaxTimeOpen_Seconds     = 300;
-input double   Inp_Rule11_LockedProfit_Pips      = 20.0;
-
-input group "════════ RISK MANAGEMENT ════════"
-input double   Inp_MaxDailyLoss_Pct               = 2.0;
-input double   Inp_MaxWeeklyLoss_Pct              = 5.0;
-input double   Inp_MaxMonthlyLoss_Pct             = 10.0;
-input bool     Inp_HaltOnStateCorruption          = true;
+// All input parameters are strictly defined inside CGlobalInputs.mqh to prevent
+// multiple definition errors across modular includes.
+#include <MultiAssetEA_Pro2.0/Core/CGlobalInputs.mqh>
 
 #include <MultiAssetEA_Pro2.0/Core/CEngine.mqh>
 
