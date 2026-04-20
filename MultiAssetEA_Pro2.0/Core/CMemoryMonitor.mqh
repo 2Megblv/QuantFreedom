@@ -13,10 +13,10 @@
 //| Prevents memory exhaustion crashes from unbounded arrays
 //+------------------------------------------------------------------+
 
+#define MAX_ARRAY_SIZE 100000
+
 class CMemoryMonitor
 {
-public:
-   static const int MAX_ARRAY_SIZE = 100000;
 private:
    int m_allocatedCount;                       // Current allocation count
    int m_highWaterMark;                        // Peak allocation ever reached

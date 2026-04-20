@@ -70,8 +70,8 @@ CStrategyBase::CStrategyBase()
       m_lastDecisions[i].symbol = "";
       m_lastDecisions[i].timestamp = 0;
       m_lastDecisions[i].direction = 0;
-      m_lastDecisions[i].vwapSignal = false;
-      m_lastDecisions[i].asianSignal = false;
+      m_lastDecisions[i].passedLayer1 = false;
+      m_lastDecisions[i].passedLayer2 = false;
    }
 }
 

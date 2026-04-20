@@ -124,11 +124,10 @@ public:
       string json = "{\n";
       json += "  \"symbol\": \"" + symbol + "\",\n";
       json += "  \"date\": \"" + todayDate + "\",\n";
-      json += "  \"sweep_detected\": " + FormatJsonBool(cfg.sweep_detected) + ",\n";
-      json += "  \"sweep_direction\": " + IntegerToString(cfg.sweep_direction) + ",\n";
-      json += "  \"sweep_bar_count\": " + IntegerToString(cfg.sweep_bar_count) + ",\n";
-      json += "  \"sweep_reclaimed\": " + FormatJsonBool(cfg.sweep_reclaimed) + ",\n";
-      json += "  \"sweep_retouched\": " + FormatJsonBool(cfg.sweep_retouched) + ",\n";
+      json += "  \"sweep_detected\": " + FormatJsonBool(cfg.vwapSweepDetected) + ",\n";
+      json += "  \"sweep_direction\": " + IntegerToString(cfg.vwapSweepDirection) + ",\n";
+      json += "  \"sweep_bar_count\": " + IntegerToString(cfg.vwapSweepBarCount) + ",\n";
+      json += "  \"sweep_reclaimed\": " + FormatJsonBool(cfg.vwapSweepReclaimed) + ",\n";
       json += "  \"timestamp\": " + IntegerToString((int)TimeCurrent()) + "\n";
       json += "}\n";
       
@@ -184,23 +183,20 @@ public:
       string sweepDirection = ParseJsonValue(json, "sweep_direction");
       string sweepBarCount = ParseJsonValue(json, "sweep_bar_count");
       string sweepReclaimed = ParseJsonValue(json, "sweep_reclaimed");
-      string sweepRetouched = ParseJsonValue(json, "sweep_retouched");
       
       if(sweepDetected == "") return false;  // Parse failed
       
       // Restore state
-      cfg.sweep_detected = (sweepDetected == "true");
-      cfg.sweep_direction = (int)StringToDouble(sweepDirection);
-      cfg.sweep_bar_count = (int)StringToDouble(sweepBarCount);
-      cfg.sweep_reclaimed = (sweepReclaimed == "true");
-      cfg.sweep_retouched = (sweepRetouched == "true");
+      cfg.vwapSweepDetected = (sweepDetected == "true");
+      cfg.vwapSweepDirection = (int)StringToDouble(sweepDirection);
+      cfg.vwapSweepBarCount = (int)StringToDouble(sweepBarCount);
+      cfg.vwapSweepReclaimed = (sweepReclaimed == "true");
       
       Print("✓ Sweep state recovered: ", symbol, " from ", filePath);
-      Print("  ├─ Sweep Detected: ", cfg.sweep_detected);
-      Print("  ├─ Direction: ", cfg.sweep_direction);
-      Print("  ├─ Bar Count: ", cfg.sweep_bar_count);
-      Print("  ├─ Reclaimed: ", cfg.sweep_reclaimed);
-      Print("  └─ Retouched: ", cfg.sweep_retouched);
+      Print("  ├─ Sweep Detected: ", cfg.vwapSweepDetected);
+      Print("  ├─ Direction: ", cfg.vwapSweepDirection);
+      Print("  ├─ Bar Count: ", cfg.vwapSweepBarCount);
+      Print("  ├─ Reclaimed: ", cfg.vwapSweepReclaimed);
       
       return true;
    }
