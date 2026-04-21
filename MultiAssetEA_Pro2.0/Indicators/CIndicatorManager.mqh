@@ -236,8 +236,14 @@ void CIndicatorManager::UpdateIndicatorsOnBar(string symbol, int handleEMAFast, 
       }
       else if(Inp_EnableTradeLogging)
       {
-         Print("⚠️ CIndicatorManager: session VWAP CopyRates returned ", copied,
-               " for ", symbol, " err=", GetLastError());
+         int err = GetLastError();
+         // Errors 4401 (History not found) and 4202/5019 (Not enough data in first minute of the day)
+         // These are normal during the very beginning of a new session/day, especially on OTC markets.
+         if (err != 4401 && err != 4202 && err != 5019 && err != 4014)
+         {
+             Print("⚠️ CIndicatorManager: session VWAP CopyRates returned ", copied,
+                   " for ", symbol, " err=", err);
+         }
       }
    }
 };
