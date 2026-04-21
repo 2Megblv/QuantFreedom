@@ -257,13 +257,6 @@ void CEngine::OnNewBar()
 
    if(!m_riskMgr.CanEnterTrade()) return; // Risk guard blocks computation if daily breached
 
-   // Block all entries during the EOD flatten window (using configurable Inp_EODBlockEntryMinutes)
-   // Usually NY close occurs around midnight server time.
-   MqlDateTime dt_block;
-   TimeToStruct(TimeCurrent(), dt_block);
-   int minutesFromMidnight = (23 - dt_block.hour) * 60 + (60 - dt_block.min);
-   if(minutesFromMidnight <= Inp_EODBlockEntryMinutes) return; // Wait for next day reset
-
    int totalSymbols = m_symMgr.GetCount();
    string strStates[];
    ArrayResize(strStates, totalSymbols);

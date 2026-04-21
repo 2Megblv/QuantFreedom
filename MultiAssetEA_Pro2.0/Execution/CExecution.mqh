@@ -747,13 +747,32 @@ void CExecution::ManageTickExits(CRiskManager* pRiskMgr, SIndicatorState &states
 
                double freezeLevel = SymbolInfoInteger(symbol, SYMBOL_TRADE_FREEZE_LEVEL) * point;
                bool isValid = true;
-               if(type == POSITION_TYPE_BUY && newSL >= tick.bid - freezeLevel - minDistPts) isValid = false;
-               if(type == POSITION_TYPE_SELL && newSL <= tick.ask + freezeLevel + minDistPts) isValid = false;
+
+               // Avoid invalid stops by recalculating minimum constraints securely
+               if(type == POSITION_TYPE_BUY)
+               {
+                  double maxAllowedSL = tick.bid - MathMax(freezeLevel, minDistPts);
+                  if (newSL > maxAllowedSL) newSL = NormalizeDouble(maxAllowedSL, digits);
+               }
+               else
+               {
+                  double minAllowedSL = tick.ask + MathMax(freezeLevel, minDistPts);
+                  if (newSL < minAllowedSL) newSL = NormalizeDouble(minAllowedSL, digits);
+               }
+
+               req.sl = newSL; // Update request to cleanly bound value
+
+               // Don't send requests if SL essentially hasn't advanced
+               if(type == POSITION_TYPE_BUY && newSL <= sl + point) isValid = false;
+               if(type == POSITION_TYPE_SELL && sl > 0.0 && newSL >= sl - point) isValid = false;
 
                if(isValid)
                {
                   if(!OrderSend(req, res) || res.retcode != TRADE_RETCODE_DONE)
-                     Print("⚠️ Trailing Stop Modify [", symbol, "] retcode=", res.retcode, " err=", GetLastError(), " newSL=", newSL);
+                  {
+                     int err = GetLastError();
+                     if (err != 4756) Print("⚠️ Trailing Stop Modify [", symbol, "] retcode=", res.retcode, " err=", err, " newSL=", newSL);
+                  }
                }
             }
          }
@@ -796,8 +815,23 @@ void CExecution::ManageTickExits(CRiskManager* pRiskMgr, SIndicatorState &states
                // Avoid invalid stops error by re-verifying stops vs current ask/bid
                double freezeLevel = SymbolInfoInteger(symbol, SYMBOL_TRADE_FREEZE_LEVEL) * pointR11;
                bool isValid = true;
-               if(type == POSITION_TYPE_BUY && lockLevel >= tick.bid - freezeLevel - minDistPtsR11) isValid = false;
-               if(type == POSITION_TYPE_SELL && lockLevel <= tick.ask + freezeLevel + minDistPtsR11) isValid = false;
+
+               if(type == POSITION_TYPE_BUY)
+               {
+                  double maxAllowedSL = tick.bid - MathMax(freezeLevel, minDistPtsR11);
+                  if (lockLevel > maxAllowedSL) lockLevel = NormalizeDouble(maxAllowedSL, digitsR11);
+               }
+               else
+               {
+                  double minAllowedSL = tick.ask + MathMax(freezeLevel, minDistPtsR11);
+                  if (lockLevel < minAllowedSL) lockLevel = NormalizeDouble(minAllowedSL, digitsR11);
+               }
+
+               req.sl = lockLevel;
+
+               // Don't send requests if SL essentially hasn't advanced
+               if(type == POSITION_TYPE_BUY && lockLevel <= sl + pointR11) isValid = false;
+               if(type == POSITION_TYPE_SELL && sl > 0.0 && lockLevel >= sl - pointR11) isValid = false;
 
                if(isValid)
                {
