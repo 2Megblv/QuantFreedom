@@ -45,6 +45,7 @@ private:
 
    void                  OnNewBar();
    void                  CheckWeekendFlatten();
+   void                  CheckEODFlatten();
    bool                  ValidateInputs();
    static datetime       DayStart(datetime t);
 
@@ -169,6 +170,9 @@ void CEngine::OnTick()
    // Placed before tick exits so a RULE_WeekendFlat close-all beats any other exit.
    CheckWeekendFlatten();
 
+   // EOD flatten — daily flatten 15 mins before NY Close
+   CheckEODFlatten();
+
    // PER-TICK EXITS (Trailing stops, immediate risk stops)
    m_exec.ManageTickExits(m_riskMgr, m_states);
 
@@ -252,6 +256,13 @@ void CEngine::OnNewBar()
    }
 
    if(!m_riskMgr.CanEnterTrade()) return; // Risk guard blocks computation if daily breached
+
+   // Block all entries during the EOD flatten window (using configurable Inp_EODBlockEntryMinutes)
+   // Usually NY close occurs around midnight server time.
+   MqlDateTime dt_block;
+   TimeToStruct(TimeCurrent(), dt_block);
+   int minutesFromMidnight = (23 - dt_block.hour) * 60 + (60 - dt_block.min);
+   if(minutesFromMidnight <= Inp_EODBlockEntryMinutes) return; // Wait for next day reset
 
    int totalSymbols = m_symMgr.GetCount();
    string strStates[];
@@ -434,6 +445,26 @@ void CEngine::CheckWeekendFlatten()
    if(PositionsTotal() == 0) return;
 
    m_exec.CloseAllPositions("RULE_WeekendFlat", m_riskMgr);
+}
+
+void CEngine::CheckEODFlatten()
+{
+   // EOD Flat Logic (NY Close): Flatten all positions ~15 mins before NY close.
+   // Typical NY Close is 16:00 EST / 17:00 EST depending on DST.
+   // Assuming Server Time is typically GMT+2/3, NY Close is ~23:00 / 00:00 Server Time.
+   // We flatten at hour 23, minute 45.
+
+   MqlDateTime dt;
+   TimeToStruct(TimeCurrent(), dt);
+
+   // EOD flatten execution:
+   if(dt.hour == 23 && dt.min >= 45)
+   {
+      // Fast path out
+      if(PositionsTotal() == 0) return;
+
+      m_exec.CloseAllPositions("RULE_EODFlat", m_riskMgr);
+   }
 }
 
 void CEngine::OnTimer()

@@ -696,7 +696,22 @@ void CExecution::ManageTickExits(CRiskManager* pRiskMgr, SIndicatorState &states
                if(CopyBuffer(atrHandle, 0, 0, 1, atrArr) == 1 && atrArr[0] > 0.0)
                   atrPips = PriceToPips(symbol, atrArr[0]);
             }
-            double trailPips = MathMax(Inp_Rule10_TrailBase_Pips, atrPips * Inp_Rule10_ATRMultiplier);
+
+            // v9.3: Advanced EOD Locking
+            // If we are within the EOD Block Entry window, apply a hyper-aggressive
+            // trailing stop so we lock out max profits before NY close.
+            MqlDateTime dt_lock;
+            TimeToStruct(TimeCurrent(), dt_lock);
+            int minutesFromMidnight = (23 - dt_lock.hour) * 60 + (60 - dt_lock.min);
+
+            double appliedATRMultiplier = Inp_Rule10_ATRMultiplier;
+            if(minutesFromMidnight <= Inp_EODBlockEntryMinutes)
+            {
+               // Hyper aggressive ATR
+               appliedATRMultiplier = Inp_EODTightTrail_ATR;
+            }
+
+            double trailPips = MathMax(Inp_Rule10_TrailBase_Pips, atrPips * appliedATRMultiplier);
             double trailDist = PipsToPrice(symbol, trailPips);
             int    digits    = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
             double newSL = (type == POSITION_TYPE_BUY) ? NormalizeDouble(tick.bid - trailDist, digits) : NormalizeDouble(tick.ask + trailDist, digits);

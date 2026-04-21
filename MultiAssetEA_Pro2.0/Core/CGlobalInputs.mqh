@@ -114,4 +114,8 @@ input group "════════ WEEKEND GAP PROTECTION (v9.1) ════
 // Set to -1 to disable (FX-only accounts or 24/7 symbols).
 input int      Inp_FridayFlattenHour              = 22;       // Server hour (0–23) at which Friday close-all fires; -1 disables
 
+input group "════════ ADVANCED EOD LOCKING (v9.3) ════════"
+input int      Inp_EODBlockEntryMinutes           = 120;      // Block new entries this many minutes before NY close
+input double   Inp_EODTightTrail_ATR              = 0.5;      // Aggressive trailing stop multiplier applied during block window
+
 #endif
