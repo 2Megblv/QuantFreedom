@@ -26,24 +26,20 @@ bool CVolatilityMomentum::EvaluateEntry(string symbol, double adx, double adxPre
    // Sprint 5: Institutional MTF Context Filter
    if(trendDirection != macroTrend) return false; // Must align with continuous H4 institutional flow
 
-   // Sprint 5: Session Anchoring (Liquidity Windows)
-   MqlDateTime dt;
-   TimeToStruct(TimeCurrent(), dt);
+   // v9.3: Removed Session Anchoring penalty.
+   // Gold, FX, and Futures frequently establish their core structural trends
+   // during the Asian/Sydney sessions. Penalizing early momentum mathematically
+   // forces the EA into late "moving train" entries during the London/NY whipsaws,
+   // drastically worsening the risk-to-reward ratio and increasing stop-outs.
+   // Standardizing entry thresholds across all 24 hours.
 
-   // London: 08:00 - 10:00 | NY: 13:30 - 15:30 (Server Time roughly GMT+2/3)
-   // We will approximate broadly for standard brokers:
-   bool isLondonOpen = (dt.hour >= 8 && dt.hour <= 10);
-   bool isNYOpen = (dt.hour >= 14 && dt.hour <= 16);
-   bool isInstWindow = (isLondonOpen || isNYOpen);
-
-   // Dynamic Weighting: Require exponentially more proof outside major sessions
-   double reqAdx = isInstWindow ? 25.0 : 40.0;
-   double reqVolMult = isInstWindow ? 2.0 : 4.0;
+   double reqAdx = 25.0;
+   double reqVolMult = 2.0;
 
    if(adx < reqAdx) return false;          // Require structural trend
 
    // Sprint 5: VSA Proxy Filter
-   if(tickVolMA > 0 && tickVol < tickVolMA * reqVolMult) return false; // Genuine algorithmic surges spike volume 200%+ (400% outside sessions)
+   if(tickVolMA > 0 && tickVol < tickVolMA * reqVolMult) return false; // Genuine algorithmic surges spike volume 200%+
 
    // v8.6.1: ADX Slope Validation (prevent entry on falling ADX = trend exhaustion)
    if(!IsADXRising(adx, adxPrevious))

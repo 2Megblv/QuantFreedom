@@ -507,7 +507,8 @@ void CExecution::ClosePositionPartial(ulong ticket, double volume, ENUM_POSITION
    if(ticket <= 0 || volume <= 0) return;
 
    // Block execution attempts if the symbol is off-session to prevent log floods of "Market closed"
-   if(!SymbolInfoInteger(symbol, SYMBOL_SESSION_DEALS)) return;
+   // Using SYMBOL_TRADE_MODE protects against OTC markets that don't publish session deals.
+   if(SymbolInfoInteger(symbol, SYMBOL_TRADE_MODE) == SYMBOL_TRADE_MODE_DISABLED) return;
 
    double positionProfit = 0.0;
    double fullVolume     = 0.0;
@@ -598,7 +599,7 @@ void CExecution::ManageTickExits(CRiskManager* pRiskMgr, SIndicatorState &states
 
       // Verify symbol is trading before trying to run trailing stops or market closes
       // Prevents "Market closed" API errors and slowness off-hours
-      if(!SymbolInfoInteger(symbol, SYMBOL_SESSION_DEALS)) continue;
+      if(SymbolInfoInteger(symbol, SYMBOL_TRADE_MODE) == SYMBOL_TRADE_MODE_DISABLED) continue;
 
       ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
       double entry = PositionGetDouble(POSITION_PRICE_OPEN);
@@ -652,6 +653,7 @@ void CExecution::ManageTickExits(CRiskManager* pRiskMgr, SIndicatorState &states
 
          double minLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
          double stepLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+         if(stepLot <= 0.0) stepLot = minLot > 0.0 ? minLot : 0.01;
 
          if(hitTP75 && !m_orderRecords[recIdx].tp75Taken)
          {
@@ -837,6 +839,7 @@ void CExecution::ManageBarExits(CRiskManager* pRiskMgr, SIndicatorState &indStat
          {
             double minLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
             double stepLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+            if(stepLot <= 0.0) stepLot = minLot > 0.0 ? minLot : 0.01;
 
             double pct = MathMin(100.0, MathMax(0.0, Inp_Rule4_PartialClose_Pct));
             double closeVol = NormalizeDouble(vol * (pct / 100.0), 2);
