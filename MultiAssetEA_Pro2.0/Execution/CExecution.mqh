@@ -506,6 +506,9 @@ void CExecution::ClosePositionPartial(ulong ticket, double volume, ENUM_POSITION
 {
    if(ticket <= 0 || volume <= 0) return;
 
+   // Block execution attempts if the symbol is off-session to prevent log floods of "Market closed"
+   if(!SymbolInfoInteger(symbol, SYMBOL_SESSION_DEALS)) return;
+
    double positionProfit = 0.0;
    double fullVolume     = 0.0;
    if(PositionSelectByTicket(ticket))
@@ -554,10 +557,15 @@ void CExecution::ClosePositionPartial(ulong ticket, double volume, ENUM_POSITION
    else
    {
       int err = GetLastError();
-      // ERR_INVALID_VOLUME (4751) or ERR_INVALID_STOPS (4756)
-      // Volume errors happen if close slice volume is invalid.
-      // Often partial close percentages yield volumes that don't match the broker's SYMBOL_VOLUME_STEP.
-      Print("⚠️ ERROR closing partial volume ", volume, " for ", symbol, ": ", err);
+      // ERR_MARKET_CLOSED (10018) should skip noisily logging
+      if(err != 10018 && err != 4756)
+      {
+         // ERR_INVALID_VOLUME (4751) or ERR_INVALID_STOPS (4756)
+         // Volume errors happen if close slice volume is invalid.
+         // Often partial close percentages yield volumes that don't match the broker's SYMBOL_VOLUME_STEP.
+         // Error 4756 occurs frequently if modifying a close while market has just moved.
+         Print("⚠️ ERROR closing partial volume ", volume, " for ", symbol, ": ", err);
+      }
    }
 }
 
@@ -587,6 +595,11 @@ void CExecution::ManageTickExits(CRiskManager* pRiskMgr, SIndicatorState &states
       if((long)PositionGetInteger(POSITION_MAGIC) != Inp_MagicNumber) continue;
       
       string symbol = PositionGetString(POSITION_SYMBOL);
+
+      // Verify symbol is trading before trying to run trailing stops or market closes
+      // Prevents "Market closed" API errors and slowness off-hours
+      if(!SymbolInfoInteger(symbol, SYMBOL_SESSION_DEALS)) continue;
+
       ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
       double entry = PositionGetDouble(POSITION_PRICE_OPEN);
       double sl = PositionGetDouble(POSITION_SL);
