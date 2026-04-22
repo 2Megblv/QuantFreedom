@@ -257,6 +257,13 @@ void CEngine::OnNewBar()
 
    if(!m_riskMgr.CanEnterTrade()) return; // Risk guard blocks computation if daily breached
 
+   // Block all entries during the EOD flatten window (using configurable Inp_EODBlockEntryMinutes)
+   // Usually NY close occurs around midnight server time.
+   MqlDateTime dt_block;
+   TimeToStruct(TimeCurrent(), dt_block);
+   int minutesFromMidnight = (23 - dt_block.hour) * 60 + (60 - dt_block.min);
+   if(minutesFromMidnight <= Inp_EODBlockEntryMinutes) return; // Wait for next day reset
+
    int totalSymbols = m_symMgr.GetCount();
    string strStates[];
    ArrayResize(strStates, totalSymbols);
@@ -316,20 +323,96 @@ void CEngine::OnNewBar()
       double tpPts   = m_exec.PipsToPrice(conf.symbol, slDistancePips * Inp_RiskRewardRatio);
       int    digits  = (int)SymbolInfoInteger(conf.symbol, SYMBOL_DIGITS);
 
-      // v8.6.1: Asian Breakout with sweep+reclaim (pass config by ref + EMA Mid for quality filter)
+      // ── SCORING LOGIC ──
+      // Evaluate all strategies, assign a score, and take the highest scoring valid signal.
+      // We must copy the struct to prevent losing the buildup state from strategies that don't "win" the scoring.
+      int bestDir = 0;
+      double bestScore = -1.0;
+      string bestStrat = "";
+      SSymbolConfig winningConf = conf;
+
+      int tempDirBreakout = 0;
+      SSymbolConfig confBreakout = conf;
       if(Inp_EnableAsianBreakout &&
-         m_stratBreakout.EvaluateEntry(conf.symbol, conf.asianHigh, conf.asianLow,
+         m_stratBreakout.EvaluateEntry(confBreakout.symbol, confBreakout.asianHigh, confBreakout.asianLow,
                                          m_states[i].liveEMAMid, m_states[i].liveATR_pips,
-                                         conf, dir))
+                                         confBreakout, tempDirBreakout))
       {
+         // Breakout scoring: high priority if ADX is strong
+         double score = 50.0 + (m_states[i].liveADX > 25 ? 20.0 : 0.0);
+         if(score > bestScore) { bestScore = score; bestDir = tempDirBreakout; bestStrat = "Breakout"; winningConf = confBreakout; }
+      }
+
+      int tempDirReversion = 0;
+      SSymbolConfig confReversion = conf;
+      if(Inp_EnableVWAPReversion &&
+         m_stratReversion.EvaluateEntry(confReversion.symbol, m_states[i].liveVWAP, m_states[i].liveATR_pips,
+                                         m_states[i].liveEMAMid, confReversion, tempDirReversion))
+      {
+         // Reversion scoring: higher if ATR is high (volatile)
+         double score = 40.0 + (m_states[i].liveATR_pips > 30 ? 15.0 : 0.0);
+         if(score > bestScore) { bestScore = score; bestDir = tempDirReversion; bestStrat = "Reversion"; winningConf = confReversion; }
+      }
+
+      int tempDirMomentum = 0;
+      SSymbolConfig confMomentum = conf;
+      if(Inp_EnableVolatilityMom &&
+         m_stratMomentum.EvaluateEntry(confMomentum.symbol, m_states[i].liveADX, m_states[i].liveADXPrev,
+                                        m_states[i].liveTrend, m_states[i].macroTrend,
+                                        m_states[i].liveATR_pips, m_states[i].liveTickVolume, m_states[i].liveTickVolumeMA, tempDirMomentum))
+      {
+         // Momentum scoring: based on ADX level explicitly
+         double score = 30.0 + m_states[i].liveADX;
+         if(score > bestScore) { bestScore = score; bestDir = tempDirMomentum; bestStrat = "Momentum"; winningConf = confMomentum; }
+      }
+
+      conf = winningConf;
+
+      // ── NY SESSION TRADE BLOCKING & HIGH-PROBABILITY FILTERS ──
+      // Define NY Session roughly as 14:00 to 23:00 Server Time
+      bool isNYSession = (dt_block.hour >= 14 && dt_block.hour < 23);
+      bool allowNYTrade = true;
+
+      if (isNYSession && bestDir != 0)
+      {
+         if (PositionsTotal() > 0)
+         {
+            // Block new NY entries if we already have positions open (capital preservation).
+            allowNYTrade = false;
+         }
+         else
+         {
+            // Convert bestScore into a generic percentage probability (rough normalization to 100 max)
+            double probability = MathMin(bestScore * 1.25, 100.0);
+
+            // Only allow NY trades if probability is >= 80%
+            if (probability < 80.0)
+            {
+               allowNYTrade = false;
+               if (Inp_EnableTradeLogging)
+                  Print("⚠️ NY Session Trade Blocked: Probability (", probability, "%) < 80%. Capital preservation enforced.");
+            }
+            else
+            {
+               if (Inp_EnableTradeLogging)
+                  Print("✅ NY Session High-Probability Entry Approved (", probability, "%).");
+            }
+         }
+      }
+
+      // Execute Best Strategy
+      if(bestScore > 0 && bestDir != 0 && allowNYTrade)
+      {
+         dir = bestDir;
          if(!m_riskMgr.CanEnterTradeForSymbol(conf.symbol))
          {
             strStates[i] = StringFormat("%s | ⛔ PER-SYM CAP", conf.symbol);
          }
-         else if(m_portfolioRisk.CanAddExposure(conf.symbol, dir, lotSize)) // C5: delta gate
+         else if(m_portfolioRisk.CanAddExposure(conf.symbol, dir, lotSize))
          {
-            Print("Breakout Entry → ", conf.symbol, " dir=", dir);
-            if(Inp_UseLimitOrdersForBreakout)
+            Print(bestStrat, " Entry → ", conf.symbol, " dir=", dir, " Score=", bestScore);
+
+            if(bestStrat == "Breakout" && Inp_UseLimitOrdersForBreakout)
             {
                double limitPrice = (dir == 1) ? conf.asianHigh + m_exec.PipsToPrice(conf.symbol, Inp_LimitBufferPips) : conf.asianLow - m_exec.PipsToPrice(conf.symbol, Inp_LimitBufferPips);
                double slLim = NormalizeDouble((dir == 1) ? limitPrice - slPts : limitPrice + slPts, digits);
@@ -337,59 +420,6 @@ void CEngine::OnNewBar()
                m_exec.ExecuteLimitOrder(conf.symbol, dir, lotSize, limitPrice, slLim, tpLim);
             }
             else if(haveTick)
-            {
-               double entryPx = (dir == 1) ? entryTick.ask : entryTick.bid;
-               double slPx = NormalizeDouble((dir == 1) ? entryPx - slPts : entryPx + slPts, digits);
-               double tpPx = NormalizeDouble((dir == 1) ? entryPx + tpPts : entryPx - tpPts, digits);
-               m_exec.ExecuteMarketOrder(conf.symbol, dir, lotSize, slPx, tpPx);
-            }
-            m_riskMgr.IncrementTradesToday(conf.symbol);
-         }
-         else
-         {
-            strStates[i] = StringFormat("%s | ⛔ PORTFOLIO HEDGE LIMIT", conf.symbol);
-         }
-      }
-      // v8.6.1: VWAP Reversion with sweep+reclaim (pass config by ref + EMA Mid for quality filter)
-      else if(Inp_EnableVWAPReversion &&
-              m_stratReversion.EvaluateEntry(conf.symbol, m_states[i].liveVWAP, m_states[i].liveATR_pips,
-                                              m_states[i].liveEMAMid, conf, dir))
-      {
-         if(!m_riskMgr.CanEnterTradeForSymbol(conf.symbol))
-         {
-            strStates[i] = StringFormat("%s | ⛔ PER-SYM CAP", conf.symbol);
-         }
-         else if(m_portfolioRisk.CanAddExposure(conf.symbol, dir, lotSize))
-         {
-            Print("Reversion Entry → ", conf.symbol, " dir=", dir);
-            if(haveTick)
-            {
-               double entryPx = (dir == 1) ? entryTick.ask : entryTick.bid;
-               double slPx = NormalizeDouble((dir == 1) ? entryPx - slPts : entryPx + slPts, digits);
-               double tpPx = NormalizeDouble((dir == 1) ? entryPx + tpPts : entryPx - tpPts, digits);
-               m_exec.ExecuteMarketOrder(conf.symbol, dir, lotSize, slPx, tpPx);
-            }
-            m_riskMgr.IncrementTradesToday(conf.symbol);
-         }
-         else
-         {
-            strStates[i] = StringFormat("%s | ⛔ PORTFOLIO HEDGE LIMIT", conf.symbol);
-         }
-      }
-      // v8.6.1: Volatility Momentum with ADX slope filter (pass adxPrevious for slope validation)
-      else if(Inp_EnableVolatilityMom &&
-              m_stratMomentum.EvaluateEntry(conf.symbol, m_states[i].liveADX, m_states[i].liveADXPrev,
-                                             m_states[i].liveTrend, m_states[i].macroTrend,
-                                             m_states[i].liveATR_pips, m_states[i].liveTickVolume, m_states[i].liveTickVolumeMA, dir))
-      {
-         if(!m_riskMgr.CanEnterTradeForSymbol(conf.symbol))
-         {
-            strStates[i] = StringFormat("%s | ⛔ PER-SYM CAP", conf.symbol);
-         }
-         else if(m_portfolioRisk.CanAddExposure(conf.symbol, dir, lotSize))
-         {
-            Print("Momentum Entry → ", conf.symbol, " dir=", dir);
-            if(haveTick)
             {
                double entryPx = (dir == 1) ? entryTick.ask : entryTick.bid;
                double slPx = NormalizeDouble((dir == 1) ? entryPx - slPts : entryPx + slPts, digits);
