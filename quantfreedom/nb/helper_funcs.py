@@ -660,7 +660,7 @@ def get_to_the_upside_nb(
     if x_xm_s.sum() == 0:
         b1 = 0.0
     else:
-        b1 = (x_xm * y_ym).sum() / x_xm_s.sum()
+        b1 = 0.0 if x_xm_s.sum() == 0 else (x_xm * y_ym).sum() / x_xm_s.sum()
     b0 = ym - b1 * xm
 
     y_pred = b0 + b1 * x
@@ -672,7 +672,7 @@ def get_to_the_upside_nb(
     if y_ym_s.sum() == 0:
         to_the_upside = 0.0
     else:
-        to_the_upside = yp_ym_s.sum() / y_ym_s.sum()
+        to_the_upside = 0.0 if y_ym_s.sum() == 0 else yp_ym_s.sum() / y_ym_s.sum()
 
     if gains_pct <= 0:
         to_the_upside = -to_the_upside
@@ -690,7 +690,7 @@ def fill_strategy_result_records_nb(
 ) -> RecordArray:
     # win rate calc
     win_loss = np.where(wins_and_losses_array_no_be < 0, 0, 1)
-    win_rate = round(np.count_nonzero(win_loss) / win_loss.size * 100, 2) if win_loss.size > 0 else 0.0
+    win_rate = 0.0 if win_loss.size == 0 else round(np.count_nonzero(win_loss) / win_loss.size * 100, 2)
 
     total_pnl = temp_strat_records["real_pnl"][
         ~np.isnan(temp_strat_records["real_pnl"])

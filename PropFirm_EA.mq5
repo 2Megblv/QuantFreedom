@@ -4,7 +4,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2024, Trading Systems"
 #property link      ""
-#property version   "3.00"
+#property version   "1.30"
 
 #include <Trade\Trade.mqh>
 CTrade trade;
@@ -29,6 +29,10 @@ input double PartialTakeProfitRR = 1.50;    // 50% TP distance
 input double ExtendedTakeProfitRR = 12.48;  // Extended TP for the remaining 50%
 input double NY_Precision_ADX_Level = 30.0; // >= 80% Confidence Level required for NY Entries
 
+// QFisher ARMI Precision Filter
+input int QFisher_Lookback = 14;            // Lookback for QFisher ARMI
+input double QFisher_Threshold = 1.5;       // Threshold for QFisher Signal (e.g. 1.5 for strong trend)
+
 // Behavioural Constants
 input bool UsePartialTP = true;             // Execute the Partial TP half
 input bool UseExtendedTP = true;            // Execute the Extended TP half
@@ -44,6 +48,23 @@ double StartOfWeekBalance = 0;
 // Global Indicator Handles
 int ATR_Handle = INVALID_HANDLE;
 int ADX_Handle = INVALID_HANDLE;
+int QFisher_Handle = INVALID_HANDLE;
+
+//+------------------------------------------------------------------+
+//| Dashboard Helper                                                 |
+//+------------------------------------------------------------------+
+void UpdateDashboard(string statusMessage)
+  {
+   string dashboard = "==============================\n";
+   dashboard += "    PROP FIRM EA PRO\n";
+   dashboard += "    Version: 1.30\n";
+   dashboard += "==============================\n";
+   dashboard += "Symbol: " + _Symbol + "\n";
+   dashboard += "Status: " + statusMessage + "\n";
+   dashboard += "==============================";
+
+   Comment(dashboard);
+  }
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -54,6 +75,15 @@ int OnInit()
    StartOfDayBalance = AccountInfoDouble(ACCOUNT_BALANCE);
    StartOfWeekBalance = AccountInfoDouble(ACCOUNT_BALANCE);
 
+   // Set Chart Colors to Light Purple (Lavender)
+   ChartSetInteger(0, CHART_COLOR_BACKGROUND, clrLavender);
+   ChartSetInteger(0, CHART_COLOR_FOREGROUND, clrBlack); // Ensure text is visible
+   ChartSetInteger(0, CHART_COLOR_GRID, clrGray);
+   ChartSetInteger(0, CHART_COLOR_CANDLE_BULL, clrGreen);
+   ChartSetInteger(0, CHART_COLOR_CANDLE_BEAR, clrRed);
+
+   UpdateDashboard("Initializing...");
+
    ATR_Handle = iATR(_Symbol, PERIOD_M15, ATR_Period);
    ADX_Handle = iADX(_Symbol, PERIOD_M15, 14);
 
@@ -63,11 +93,20 @@ int OnInit()
       return(INIT_FAILED);
      }
 
+   // Initialize Custom QFisher ARMI Indicator
+   QFisher_Handle = iCustom(_Symbol, PERIOD_M15, "QFisher_ARMI_TickVolume", QFisher_Lookback);
+   if(QFisher_Handle == INVALID_HANDLE)
+     {
+      Print("Failed to initialize QFisher ARMI custom indicator. Ensure 'QFisher_ARMI_TickVolume.ex5' is in MQL5/Indicators/");
+      return(INIT_FAILED);
+     }
+
    return(INIT_SUCCEEDED);
   }
 
 void OnDeinit(const int reason)
   {
+   Comment(""); // Clear Dashboard
    if(ATR_Handle != INVALID_HANDLE) IndicatorRelease(ATR_Handle);
    if(ADX_Handle != INVALID_HANDLE) IndicatorRelease(ADX_Handle);
   }
@@ -77,28 +116,58 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
   {
-   if(CheckDailyDrawdown() || CheckWeeklyDrawdown()) return;
+   if(CheckDailyDrawdown() || CheckWeeklyDrawdown())
+     {
+      UpdateDashboard("Drawdown limit reached! Trading Suspended.");
+      return;
+     }
 
    // HARD RULE: Close all trades 15 mins before NY Close
    CloseBeforeNYSession();
 
-   if(!IsTradingSession()) return;
+   if(!IsTradingSession())
+     {
+      UpdateDashboard("Outside Trading Session (Flattened)");
+      return;
+     }
 
-   if(IsNewsWindow(_Symbol) || !CheckCorrelation()) return;
+   if(IsNewsWindow(_Symbol))
+     {
+      UpdateDashboard("High Impact News! Trading Blocked");
+      return;
+     }
+
+   if (!CheckCorrelation())
+     {
+      UpdateDashboard("Max Correlation Exposure Reached");
+      return;
+     }
 
    // Manage Open Positions (Partial TPs, Break-Even, Aggressive NY Trailing)
    ManageOpenPositions();
 
    // Entry Logic
-   if (AllowMultiplePositions || !HasOpenPosition(_Symbol))
+   if (HasOpenPosition(_Symbol))
+     {
+      UpdateDashboard("Managing Active Trade");
+     }
+   else
      {
       // No NY Trades if we have existing positions globally, to preserve capital
-      if (IsNYSession() && PositionsTotal() > 0) return;
+      if (IsNYSession() && PositionsTotal() > 0)
+        {
+         UpdateDashboard("Preserving Asian/London Gains (No NY Entries)");
+         return;
+        }
 
-      int signal = EvaluateSignal(_Symbol);
+      UpdateDashboard("Scanning for Precision Setups...");
+      if (AllowMultiplePositions || !HasOpenPosition(_Symbol))
+        {
+         int signal = EvaluateSignal(_Symbol);
 
-      if(signal == 1) ExecuteTrade(_Symbol, ORDER_TYPE_BUY);
-      else if (signal == -1) ExecuteTrade(_Symbol, ORDER_TYPE_SELL);
+         if(signal == 1) ExecuteTrade(_Symbol, ORDER_TYPE_BUY);
+         else if (signal == -1) ExecuteTrade(_Symbol, ORDER_TYPE_SELL);
+        }
      }
   }
 
@@ -164,6 +233,15 @@ double GetADX()
    double adx_array[];
    if(CopyBuffer(ADX_Handle, 0, 0, 1, adx_array) <= 0) return 0.0;
    return adx_array[0];
+  }
+
+double GetQFisher()
+  {
+   if (QFisher_Handle == INVALID_HANDLE) return 0.0;
+   double fisher_array[];
+   // Buffer 0 is the FisherBuffer based on the provided custom indicator code
+   if(CopyBuffer(QFisher_Handle, 0, 0, 1, fisher_array) <= 0) return 0.0;
+   return fisher_array[0];
   }
 
 //+------------------------------------------------------------------+
@@ -395,8 +473,9 @@ int EvaluateSignal(string symbol)
       if (adx < NY_Precision_ADX_Level) return 0;
      }
 
-   if(currentAsk >= highestPrice) return 1;
-   if(currentBid <= lowestPrice) return -1;
+   // Breakout confirmation combined with QFisher ARMI precision filter
+   if(currentAsk >= highestPrice && GetQFisher() >= QFisher_Threshold) return 1;
+   if(currentBid <= lowestPrice && GetQFisher() <= -QFisher_Threshold) return -1;
 
    return 0;
   }
