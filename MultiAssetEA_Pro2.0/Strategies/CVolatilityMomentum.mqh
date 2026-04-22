@@ -12,13 +12,13 @@ public:
                      CVolatilityMomentum();
                     ~CVolatilityMomentum();
 
-   virtual bool      EvaluateEntry(string symbol, double adx, double adxPrevious, int trendDirection, int macroTrend, double currentATR_Pips, double tickVol, double tickVolMA, int &direction);
+   virtual bool      EvaluateEntry(string symbol, double adx, double adxPrevious, int trendDirection, int macroTrend, double currentATR_Pips, double tickVol, double tickVolMA, double qFisher, int &direction);
 };
 
 CVolatilityMomentum::CVolatilityMomentum() {}
 CVolatilityMomentum::~CVolatilityMomentum() {}
 
-bool CVolatilityMomentum::EvaluateEntry(string symbol, double adx, double adxPrevious, int trendDirection, int macroTrend, double currentATR_Pips, double tickVol, double tickVolMA, int &direction)
+bool CVolatilityMomentum::EvaluateEntry(string symbol, double adx, double adxPrevious, int trendDirection, int macroTrend, double currentATR_Pips, double tickVol, double tickVolMA, double qFisher, int &direction)
 {
    if(trendDirection == 0) return false;
    if(currentATR_Pips < 15.0) return false; // Require raw expanding volatility
@@ -45,6 +45,15 @@ bool CVolatilityMomentum::EvaluateEntry(string symbol, double adx, double adxPre
    if(!IsADXRising(adx, adxPrevious))
    {
       return false;  // ADX falling — don't enter (trend exhausting)
+   }
+
+   // v9.5: QFisher ARMI Tick Volume Filter
+   // Validate the entry momentum directionality utilizing custom algorithmic indicator.
+   // Requires QFisher to agree with the underlying structural flow.
+   if (qFisher != -99999.0) // INVALID_INDICATOR_VALUE check fallback
+   {
+      if (trendDirection == 1 && qFisher < 0.2) return false;   // Deny weak Longs
+      if (trendDirection == -1 && qFisher > -0.2) return false; // Deny weak Shorts
    }
 
    direction = trendDirection;

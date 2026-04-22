@@ -26,6 +26,7 @@ struct SIndicatorState {
    
    double liveTickVolume;
    double liveTickVolumeMA;
+   double liveQFisher; // v9.5: Live QFisher value
    
    int    liveTrend;
    int    macroTrend;
@@ -89,12 +90,12 @@ void CIndicatorManager::InitializeState(SIndicatorState &state)
    state.macroTrend = 0;
 }
 
-void CIndicatorManager::UpdateIndicatorsOnBar(string symbol, int handleEMAFast, int handleEMAMid, int handleEMASlow, int handleEMAMacro, int handleADX, int handleATR, SIndicatorState &outState)
+void CIndicatorManager::UpdateIndicatorsOnBar(string symbol, int handleEMAFast, int handleEMAMid, int handleEMASlow, int handleEMAMacro, int handleADX, int handleATR, int handleQFisher, SIndicatorState &outState)
 {
    // Phase 1 FR-4 fix: Validate all handles before use
    if(!IsValidHandle(handleEMAFast) || !IsValidHandle(handleEMAMid) ||
       !IsValidHandle(handleEMASlow) || !IsValidHandle(handleEMAMacro) ||
-      !IsValidHandle(handleADX) || !IsValidHandle(handleATR))
+      !IsValidHandle(handleADX) || !IsValidHandle(handleATR) || !IsValidHandle(handleQFisher))
    {
       // One or more handles are invalid - mark all indicators as invalid
       InitializeState(outState);
@@ -130,6 +131,12 @@ void CIndicatorManager::UpdateIndicatorsOnBar(string symbol, int handleEMAFast, 
       outState.liveADX = buf[0];
    else
       outState.liveADX = INVALID_INDICATOR_VALUE;
+
+   // v9.5: Fetch QFisher indicator
+   if(CopyBuffer(handleQFisher, 0, 1, 1, buf) > 0) // Buffer 0 = FisherBuffer
+      outState.liveQFisher = buf[0];
+   else
+      outState.liveQFisher = INVALID_INDICATOR_VALUE;
 
    if(CopyBuffer(handleADX, 0, 2, 1, buf) > 0)
       outState.liveADXPrev = buf[0];

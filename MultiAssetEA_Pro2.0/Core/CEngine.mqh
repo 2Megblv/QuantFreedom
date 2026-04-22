@@ -275,7 +275,7 @@ void CEngine::OnNewBar()
       if(!m_symMgr.GetSymbolRef(i, conf)) continue;
 
       // Update Cached Indicator State once per bar
-      m_indMgr.UpdateIndicatorsOnBar(conf.symbol, conf.handleEMAFast, conf.handleEMAMid, conf.handleEMASlow, conf.handleEMAMacro, conf.handleADX, conf.handleATR, m_states[i]);
+      m_indMgr.UpdateIndicatorsOnBar(conf.symbol, conf.handleEMAFast, conf.handleEMAMid, conf.handleEMASlow, conf.handleEMAMacro, conf.handleADX, conf.handleATR, conf.handleQFisher, m_states[i]);
 
       // Manage Bar Exits (Divergence, logic drops)
       m_exec.ManageBarExits(m_riskMgr, m_states[i], conf.symbol);
@@ -359,7 +359,7 @@ void CEngine::OnNewBar()
       if(Inp_EnableVolatilityMom &&
          m_stratMomentum.EvaluateEntry(confMomentum.symbol, m_states[i].liveADX, m_states[i].liveADXPrev,
                                         m_states[i].liveTrend, m_states[i].macroTrend,
-                                        m_states[i].liveATR_pips, m_states[i].liveTickVolume, m_states[i].liveTickVolumeMA, tempDirMomentum))
+                                        m_states[i].liveATR_pips, m_states[i].liveTickVolume, m_states[i].liveTickVolumeMA, m_states[i].liveQFisher, tempDirMomentum))
       {
          // Momentum scoring: based on ADX level explicitly
          double score = 30.0 + m_states[i].liveADX;

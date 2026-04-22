@@ -52,6 +52,7 @@ void CSymbolManager::InitializeSymbols(string symbolsList)
       m_symbols[i].handleEMAMacro = iMA(result[i], PERIOD_H4, 50, 0, MODE_EMA, PRICE_CLOSE);
       m_symbols[i].handleADX = iADX(result[i], PERIOD_M15, 14);
       m_symbols[i].handleATR = iATR(result[i], PERIOD_M15, 14);
+      m_symbols[i].handleQFisher = iCustom(result[i], PERIOD_M15, "QFisher_ARMI_TickVolume", 14);
       
       m_symbols[i].asianHigh = 0;
       m_symbols[i].asianLow = 999999;
@@ -68,6 +69,7 @@ void CSymbolManager::ReleaseHandles()
       if(m_symbols[i].handleEMAMacro != INVALID_HANDLE) IndicatorRelease(m_symbols[i].handleEMAMacro);
       if(m_symbols[i].handleADX != INVALID_HANDLE) IndicatorRelease(m_symbols[i].handleADX);
       if(m_symbols[i].handleATR != INVALID_HANDLE) IndicatorRelease(m_symbols[i].handleATR);
+      if(m_symbols[i].handleQFisher != INVALID_HANDLE) IndicatorRelease(m_symbols[i].handleQFisher);
    }
    m_count = 0;
 }

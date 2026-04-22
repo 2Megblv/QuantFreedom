@@ -16,6 +16,7 @@ struct SSymbolConfig
    int     handleEMAMacro;
    int     handleADX;
    int     handleATR;
+   int     handleQFisher; // v9.5: Custom QFisher ARMI Tick Volume handle
 
    double  asianHigh;
    double  asianLow;
