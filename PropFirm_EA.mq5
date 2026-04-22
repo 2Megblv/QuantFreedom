@@ -39,17 +39,18 @@ input bool UsePartialTP = true;             // Execute the Partial TP half
 input bool UseExtendedTP = true;            // Execute the Extended TP half
 input bool AllowMultiplePositions = false;  // Allow multiple concurrent positions on a single symbol
 
-// Hardcoded Assets
-string AssetsToTrade[] = {"GBPJPY", "US30", "USOIL", "XAUUSD", "DAX30", "NDAQ", "SPX500"};
+// Dynamic Assets List (Comma Separated)
+input string TradeAssets = "GBPJPY,US30,USOIL,XAUUSD,DAX30,NDAQ,SPX500";
+string AssetList[];
 
 // Variables for Drawdown tracking
 double StartOfDayBalance = 0;
 double StartOfWeekBalance = 0;
 
-// Global Indicator Handles
-int ATR_Handle = INVALID_HANDLE;
-int ADX_Handle = INVALID_HANDLE;
-int QFisher_Handle = INVALID_HANDLE;
+// Global Indicator Handles (Arrays for Multi-Asset tracking)
+int ATR_Handles[];
+int ADX_Handles[];
+int QFisher_Handles[];
 
 //+------------------------------------------------------------------+
 //| Dashboard Helper                                                 |
@@ -58,7 +59,7 @@ void UpdateDashboard(string statusMessage)
   {
    string dashboard = "==============================\n";
    dashboard += "    PROP FIRM EA PRO\n";
-   dashboard += "    Version: 2.10\n";
+   dashboard += "    Version: 2.20\n";
    dashboard += "==============================\n";
    dashboard += "Symbol: " + _Symbol + "\n";
    dashboard += "Magic: " + IntegerToString(MagicNumber) + "\n";
@@ -73,50 +74,70 @@ void UpdateDashboard(string statusMessage)
 //+------------------------------------------------------------------+
 int OnInit()
   {
-   Print("Prop Firm EA Initialized with NY Session Capital Preservation Logic.");
+   Print("Prop Firm Multi-Asset EA Initialized.");
 
-   // Set Magic Number for Trade Execution
    trade.SetExpertMagicNumber(MagicNumber);
 
    StartOfDayBalance = AccountInfoDouble(ACCOUNT_BALANCE);
    StartOfWeekBalance = AccountInfoDouble(ACCOUNT_BALANCE);
 
    // Set Chart Colors to Dark Professional Theme
-   ChartSetInteger(0, CHART_COLOR_BACKGROUND, clr#1E1E24);   // Dark Slate Gray Background
-   ChartSetInteger(0, CHART_COLOR_FOREGROUND, clrSilver);    // Silver Text
-   ChartSetInteger(0, CHART_COLOR_GRID, clr#2B2B36);         // Faint Grid
-   ChartSetInteger(0, CHART_COLOR_CANDLE_BULL, clrSeaGreen); // Muted Bull Candle
-   ChartSetInteger(0, CHART_COLOR_CANDLE_BEAR, clrIndianRed); // Muted Bear Candle
+   ChartSetInteger(0, CHART_COLOR_BACKGROUND, clr#1E1E24);
+   ChartSetInteger(0, CHART_COLOR_FOREGROUND, clrSilver);
+   ChartSetInteger(0, CHART_COLOR_GRID, clr#2B2B36);
+   ChartSetInteger(0, CHART_COLOR_CANDLE_BULL, clrSeaGreen);
+   ChartSetInteger(0, CHART_COLOR_CANDLE_BEAR, clrIndianRed);
    ChartSetInteger(0, CHART_COLOR_CHART_UP, clrSeaGreen);
    ChartSetInteger(0, CHART_COLOR_CHART_DOWN, clrIndianRed);
 
-   UpdateDashboard("Initializing...");
+   UpdateDashboard("Initializing Headless Indicators...");
 
-   ATR_Handle = iATR(_Symbol, PERIOD_M15, ATR_Period);
-   ADX_Handle = iADX(_Symbol, PERIOD_M15, 14);
+   ushort separator = StringGetCharacter(",", 0);
+   int numAssets = StringSplit(TradeAssets, separator, AssetList);
 
-   if(ATR_Handle == INVALID_HANDLE || ADX_Handle == INVALID_HANDLE)
+   if(numAssets == 0)
      {
-      Print("Failed to initialize indicators.");
+      Print("Error: No assets defined in TradeAssets input.");
       return(INIT_FAILED);
      }
 
-   // Initialize Custom QFisher ARMI Indicator
-   QFisher_Handle = iCustom(_Symbol, PERIOD_M15, "QFisher_ARMI_TickVolume", QFisher_Lookback);
-   if(QFisher_Handle == INVALID_HANDLE)
+   ArrayResize(ATR_Handles, numAssets);
+   ArrayResize(ADX_Handles, numAssets);
+   ArrayResize(QFisher_Handles, numAssets);
+
+   // Initialize Indicators Headlessly for each Asset
+   for(int i = 0; i < numAssets; i++)
      {
-      Print("Failed to initialize QFisher ARMI custom indicator. Ensure 'QFisher_ARMI_TickVolume.ex5' is in MQL5/Indicators/");
-      return(INIT_FAILED);
+      string symbol = AssetList[i];
+      StringTrimLeft(symbol); StringTrimRight(symbol);
+      AssetList[i] = symbol;
+
+      SymbolSelect(symbol, true);
+
+      ATR_Handles[i] = iATR(symbol, PERIOD_M15, ATR_Period);
+      ADX_Handles[i] = iADX(symbol, PERIOD_M15, 14);
+      QFisher_Handles[i] = iCustom(symbol, PERIOD_M15, "QFisher_ARMI_TickVolume", QFisher_Lookback);
+
+      if(ATR_Handles[i] == INVALID_HANDLE || ADX_Handles[i] == INVALID_HANDLE || QFisher_Handles[i] == INVALID_HANDLE)
+        {
+         PrintFormat("Failed to initialize headless indicators for %s. Ensure QFisher_ARMI_TickVolume.ex5 is compiled in Indicators folder.", symbol);
+         return(INIT_FAILED);
+        }
      }
 
+   UpdateDashboard("Running Multi-Asset Engine");
    return(INIT_SUCCEEDED);
   }
 
 void OnDeinit(const int reason)
   {
    Comment(""); // Clear Dashboard
-   if(ATR_Handle != INVALID_HANDLE) IndicatorRelease(ATR_Handle);
-   if(ADX_Handle != INVALID_HANDLE) IndicatorRelease(ADX_Handle);
+   for(int i = 0; i < ArraySize(AssetList); i++)
+     {
+      if(i < ArraySize(ATR_Handles) && ATR_Handles[i] != INVALID_HANDLE) IndicatorRelease(ATR_Handles[i]);
+      if(i < ArraySize(ADX_Handles) && ADX_Handles[i] != INVALID_HANDLE) IndicatorRelease(ADX_Handles[i]);
+      if(i < ArraySize(QFisher_Handles) && QFisher_Handles[i] != INVALID_HANDLE) IndicatorRelease(QFisher_Handles[i]);
+     }
   }
 
 //+------------------------------------------------------------------+
@@ -139,12 +160,6 @@ void OnTick()
       return;
      }
 
-   if(IsNewsWindow(_Symbol))
-     {
-      UpdateDashboard("High Impact News! Trading Blocked");
-      return;
-     }
-
    if (!CheckCorrelation())
      {
       UpdateDashboard("Max Correlation Exposure Reached");
@@ -154,37 +169,48 @@ void OnTick()
    // Manage Open Positions (Partial TPs, Break-Even, Aggressive NY Trailing)
    ManageOpenPositions();
 
-   // Entry Logic
-   if (HasOpenPosition(_Symbol))
+   // Entry Logic: Loop through all configured assets
+   bool isScanning = false;
+   for(int i = 0; i < ArraySize(AssetList); i++)
      {
-      UpdateDashboard("Managing Active Trade");
-     }
-   else
-     {
-      // No NY Trades if we have existing positions globally, to preserve capital
-      if (IsNYSession() && PositionsTotal() > 0)
-        {
-         UpdateDashboard("Preserving Asian/London Gains (No NY Entries)");
-         return;
-        }
+      string symbol = AssetList[i];
 
+      // Symbol Specific News Check
+      if(IsNewsWindow(symbol)) continue;
+
+      if (HasOpenPosition(symbol))
+        {
+         continue; // We already have a position on this asset
+        }
+      else
+        {
+         // No NY Trades if we have existing positions globally, to preserve capital
+         if (IsNYSession() && PositionsTotal() > 0) continue;
+
+         isScanning = true;
+
+         if (AllowMultiplePositions || !HasOpenPosition(symbol))
+           {
+            int signal = EvaluateSignal(symbol, i);
+
+            if(signal == 1) ExecuteTrade(symbol, ORDER_TYPE_BUY, i);
+            else if (signal == -1) ExecuteTrade(symbol, ORDER_TYPE_SELL, i);
+           }
+        }
+     }
+
+   if(isScanning)
       UpdateDashboard("Scanning for Precision Setups...");
-      if (AllowMultiplePositions || !HasOpenPosition(_Symbol))
-        {
-         int signal = EvaluateSignal(_Symbol);
-
-         if(signal == 1) ExecuteTrade(_Symbol, ORDER_TYPE_BUY);
-         else if (signal == -1) ExecuteTrade(_Symbol, ORDER_TYPE_SELL);
-        }
-     }
+   else
+      UpdateDashboard("Managing Active Trades / Pending Filters");
   }
 
 //+------------------------------------------------------------------+
 //| Execute Trade (Two Halves for Partial TP)                        |
 //+------------------------------------------------------------------+
-void ExecuteTrade(string symbol, ENUM_ORDER_TYPE orderType)
+void ExecuteTrade(string symbol, ENUM_ORDER_TYPE orderType, int assetIndex)
   {
-   double atr_value = GetATR();
+   double atr_value = GetATR(assetIndex);
    if (atr_value == 0) return;
 
    double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
@@ -227,28 +253,28 @@ void ExecuteTrade(string symbol, ENUM_ORDER_TYPE orderType)
      }
   }
 
-double GetATR()
+double GetATR(int index)
   {
-   if (ATR_Handle == INVALID_HANDLE) return 0.0;
+   if (index >= ArraySize(ATR_Handles) || ATR_Handles[index] == INVALID_HANDLE) return 0.0;
    double atr_array[];
-   if(CopyBuffer(ATR_Handle, 0, 0, 1, atr_array) <= 0) return 0.0;
+   if(CopyBuffer(ATR_Handles[index], 0, 0, 1, atr_array) <= 0) return 0.0;
    return atr_array[0];
   }
 
-double GetADX()
+double GetADX(int index)
   {
-   if (ADX_Handle == INVALID_HANDLE) return 0.0;
+   if (index >= ArraySize(ADX_Handles) || ADX_Handles[index] == INVALID_HANDLE) return 0.0;
    double adx_array[];
-   if(CopyBuffer(ADX_Handle, 0, 0, 1, adx_array) <= 0) return 0.0;
+   if(CopyBuffer(ADX_Handles[index], 0, 0, 1, adx_array) <= 0) return 0.0;
    return adx_array[0];
   }
 
-double GetQFisher()
+double GetQFisher(int index)
   {
-   if (QFisher_Handle == INVALID_HANDLE) return 0.0;
+   if (index >= ArraySize(QFisher_Handles) || QFisher_Handles[index] == INVALID_HANDLE) return 0.0;
    double fisher_array[];
    // Buffer 0 is the FisherBuffer based on the provided custom indicator code
-   if(CopyBuffer(QFisher_Handle, 0, 0, 1, fisher_array) <= 0) return 0.0;
+   if(CopyBuffer(QFisher_Handles[index], 0, 0, 1, fisher_array) <= 0) return 0.0;
    return fisher_array[0];
   }
 
@@ -262,26 +288,38 @@ void ManageOpenPositions()
 
    // Check if we are in the last 2 hours of the NY session
    bool isAggressiveNYClose = (dt.hour >= (NYCloseHour - AggressiveTrailHoursBeforeClose));
-   double currentADX = GetADX();
-   bool isWeakeningTrend = (currentADX < 20.0); // ADX dropping implies ranging/compression
 
    for(int i = PositionsTotal() - 1; i >= 0; i--)
      {
       ulong ticket = PositionGetTicket(i);
       if(ticket == 0) continue;
 
-      // Filter out trades not belonging to this EA/Asset
+      // Filter out trades not belonging to this EA instance
       if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
-      if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
 
       string symbol = PositionGetString(POSITION_SYMBOL);
+
+      // Find asset index for indicators
+      int assetIndex = -1;
+      for(int j = 0; j < ArraySize(AssetList); j++)
+        {
+         if (AssetList[j] == symbol)
+           {
+            assetIndex = j;
+            break;
+           }
+        }
+      if (assetIndex == -1) continue;
+
       double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
       double currentPrice = PositionGetDouble(POSITION_PRICE_CURRENT);
       double slPrice = PositionGetDouble(POSITION_SL);
       int type = (int)PositionGetInteger(POSITION_TYPE);
 
-      double atr_value = GetATR();
+      double atr_value = GetATR(assetIndex);
       double riskAmount = atr_value * ATR_Multiplier;
+      double currentADX = GetADX(assetIndex);
+      bool isWeakeningTrend = (currentADX < 20.0); // ADX dropping implies ranging/compression
 
       // Aggressive Pre-Close Risk Control
       if (isAggressiveNYClose && isWeakeningTrend)
@@ -494,7 +532,7 @@ bool HasOpenPosition(string symbol)
 //+------------------------------------------------------------------+
 //| Signal Evaluation (Precision Breakout)                           |
 //+------------------------------------------------------------------+
-int EvaluateSignal(string symbol)
+int EvaluateSignal(string symbol, int assetIndex)
   {
    double currentAsk = SymbolInfoDouble(symbol, SYMBOL_ASK);
    double currentBid = SymbolInfoDouble(symbol, SYMBOL_BID);
@@ -504,14 +542,14 @@ int EvaluateSignal(string symbol)
 
    if (IsNYSession())
      {
-      double adx = GetADX();
+      double adx = GetADX(assetIndex);
       // Precision Requirement: Require overwhelming directional bias (ADX > 30) for new NY Trades
       if (adx < NY_Precision_ADX_Level) return 0;
      }
 
    // Breakout confirmation combined with QFisher ARMI precision filter
-   if(currentAsk >= highestPrice && GetQFisher() >= QFisher_Threshold) return 1;
-   if(currentBid <= lowestPrice && GetQFisher() <= -QFisher_Threshold) return -1;
+   if(currentAsk >= highestPrice && GetQFisher(assetIndex) >= QFisher_Threshold) return 1;
+   if(currentBid <= lowestPrice && GetQFisher(assetIndex) <= -QFisher_Threshold) return -1;
 
    return 0;
   }
