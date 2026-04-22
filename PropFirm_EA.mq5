@@ -15,19 +15,24 @@ input double MaxDailyLossPct = 2.0;         // Max daily loss -2%
 input double MaxWeeklyLossPct = 5.0;        // Max weekly loss -5%
 
 // Session Times
-input int AsianOpenHour = 0;                // Asian Open
-input int NYOpenHour = 14;                  // NY Open (Server Time)
-input int NYCloseHour = 17;                 // NY Close (Server Time)
-input int MinutesBeforeNYClose = 15;        // Hard Rule: Close 15 mins before NY close
+input int AsianOpenHour = 17;               // Asian Open
+input int NYOpenHour = 17;                  // NY Open
+input int NYCloseHour = 15;                 // NY Close
+input int MinutesBeforeNYClose = 2;         // Hard Rule: Close before NY close
 input int AggressiveTrailHoursBeforeClose = 2; // Aggressive trailing kicks in 2 hours before close
 input int NewsWindowMinutes = 30;           // No new Trades on News Event 30Min before and After
 
 // Trade Management Settings
-input int ATR_Period = 14;
-input double ATR_Multiplier = 1.5;          // Initial SL
-input double PartialTakeProfitRR = 1.2;     // 50% TP distance (e.g. 1.2x Risk)
-input double ExtendedTakeProfitRR = 4.8;    // Extended TP for the remaining 50%
+input int ATR_Period = 13;
+input double ATR_Multiplier = 1.38;         // Initial SL
+input double PartialTakeProfitRR = 1.50;    // 50% TP distance
+input double ExtendedTakeProfitRR = 12.48;  // Extended TP for the remaining 50%
 input double NY_Precision_ADX_Level = 30.0; // >= 80% Confidence Level required for NY Entries
+
+// Behavioural Constants
+input bool UsePartialTP = true;             // Execute the Partial TP half
+input bool UseExtendedTP = true;            // Execute the Extended TP half
+input bool AllowMultiplePositions = false;  // Allow multiple concurrent positions on a single symbol
 
 // Hardcoded Assets
 string AssetsToTrade[] = {"GBPJPY", "US30", "USOIL", "XAUUSD", "DAX30", "NDAQ", "SPX500"};
@@ -85,7 +90,7 @@ void OnTick()
    ManageOpenPositions();
 
    // Entry Logic
-   if (!HasOpenPosition(_Symbol))
+   if (AllowMultiplePositions || !HasOpenPosition(_Symbol))
      {
       // No NY Trades if we have existing positions globally, to preserve capital
       if (IsNYSession() && PositionsTotal() > 0) return;
@@ -132,16 +137,16 @@ void ExecuteTrade(string symbol, ENUM_ORDER_TYPE orderType)
    // Half 2: Extended Trend TP
    double extendedTpPrice = (orderType == ORDER_TYPE_BUY) ? entryPrice + (stopLossDist * ExtendedTakeProfitRR) : entryPrice - (stopLossDist * ExtendedTakeProfitRR);
 
-   // Execute both halves
+   // Execute halves based on Behavioural Constants
    if (orderType == ORDER_TYPE_BUY)
      {
-      trade.Buy(halfLot, symbol, entryPrice, slPrice, partialTpPrice, "Asian/London Partial");
-      trade.Buy(halfLot, symbol, entryPrice, slPrice, extendedTpPrice, "Trend Runner");
+      if (UsePartialTP) trade.Buy(halfLot, symbol, entryPrice, slPrice, partialTpPrice, "Asian/London Partial");
+      if (UseExtendedTP) trade.Buy(halfLot, symbol, entryPrice, slPrice, extendedTpPrice, "Trend Runner");
      }
    else
      {
-      trade.Sell(halfLot, symbol, entryPrice, slPrice, partialTpPrice, "Asian/London Partial");
-      trade.Sell(halfLot, symbol, entryPrice, slPrice, extendedTpPrice, "Trend Runner");
+      if (UsePartialTP) trade.Sell(halfLot, symbol, entryPrice, slPrice, partialTpPrice, "Asian/London Partial");
+      if (UseExtendedTP) trade.Sell(halfLot, symbol, entryPrice, slPrice, extendedTpPrice, "Trend Runner");
      }
   }
 
@@ -275,23 +280,53 @@ bool IsTradingSession()
    MqlDateTime dt;
    TimeCurrent(dt);
    if (dt.day_of_week == 0 || dt.day_of_week == 6) return false;
-   if(dt.hour == NYCloseHour - 1 && dt.min >= (60 - MinutesBeforeNYClose)) return false;
-   if(dt.hour >= AsianOpenHour && dt.hour < NYCloseHour) return true;
-   return false;
+
+   // Check for midnight crossover
+   bool isSessionActive = false;
+   if (AsianOpenHour < NYCloseHour)
+     {
+      isSessionActive = (dt.hour >= AsianOpenHour && dt.hour < NYCloseHour);
+     }
+   else
+     {
+      isSessionActive = (dt.hour >= AsianOpenHour || dt.hour < NYCloseHour);
+     }
+
+   if (!isSessionActive) return false;
+
+   // If we are inside the liquidation window, DO NOT allow new trades
+   int liquidationHour = NYCloseHour - 1;
+   if (liquidationHour < 0) liquidationHour = 23;
+
+   if(dt.hour == liquidationHour && dt.min >= (60 - MinutesBeforeNYClose)) return false;
+
+   return true;
   }
 
 bool IsNYSession()
   {
    MqlDateTime dt;
    TimeCurrent(dt);
-   return (dt.hour >= NYOpenHour);
+
+   if (NYOpenHour < NYCloseHour)
+     {
+      return (dt.hour >= NYOpenHour && dt.hour < NYCloseHour);
+     }
+   else
+     {
+      return (dt.hour >= NYOpenHour || dt.hour < NYCloseHour);
+     }
   }
 
 void CloseBeforeNYSession()
   {
    MqlDateTime dt;
    TimeCurrent(dt);
-   if(dt.hour == NYCloseHour - 1 && dt.min >= (60 - MinutesBeforeNYClose))
+
+   int liquidationHour = NYCloseHour - 1;
+   if (liquidationHour < 0) liquidationHour = 23;
+
+   if(dt.hour == liquidationHour && dt.min >= (60 - MinutesBeforeNYClose))
      {
       if (PositionsTotal() > 0)
         {
