@@ -106,7 +106,8 @@ def fetch_historical_data(assets):
     return prices
 
 def apply_time_filter(entries_df: pd.DataFrame, datetime_index: pd.DatetimeIndex):
-    valid_time = (datetime_index.hour >= 8) & (datetime_index.hour < 17)
+    # Expanded Time Filter: Asian Open (0:00) to NY Close (17:00)
+    valid_time = (datetime_index.hour >= 0) & (datetime_index.hour < 17)
     valid_day = datetime_index.dayofweek < 5
     valid_mask = valid_time & valid_day
 
@@ -132,6 +133,38 @@ def generate_signals(prices: pd.DataFrame, num_assets: int, lookback=20):
     entries.fillna(False, inplace=True)
     return entries
 
+try:
+    import talib
+    TALIB_AVAILABLE = True
+except ImportError:
+    TALIB_AVAILABLE = False
+
+def apply_adx_ny_filter(entries_df: pd.DataFrame, prices: pd.DataFrame, datetime_index: pd.DatetimeIndex, num_assets: int):
+    """
+    Simulates the precision ADX filter during NY Session (>= 14:00)
+    If time >= 14 and ADX < 25.0, set entry to False to avoid whipsaws.
+    Gracefully bypasses if talib is not installed.
+    """
+    if not TALIB_AVAILABLE:
+        print("WARNING: TA-Lib not installed. Bypassing NY Session ADX precision filter.")
+        return entries_df
+
+    for i in range(num_assets):
+        high_prices = prices[(i, 'high')]
+        low_prices = prices[(i, 'low')]
+        close_prices = prices[(i, 'close')]
+
+        # Calculate 14-period ADX
+        adx_values = talib.ADX(high_prices, low_prices, close_prices, timeperiod=14)
+
+        # Mask where time is NY Session (>= 14) AND ADX is weak (< 25)
+        ny_whipsaw_mask = (datetime_index.hour >= 14) & (adx_values < 25.0)
+
+        # Apply filter to that asset's entries
+        entries_df[(i, 0)] = entries_df[(i, 0)] & (~ny_whipsaw_mask)
+
+    return entries_df
+
 def main():
     assets = ["GBPJPY", "US30", "OIL", "XAUUSD", "DAX30", "NASDAQ", "SPX"]
     prices = fetch_historical_data(assets)
@@ -142,6 +175,7 @@ def main():
 
     entries = generate_signals(prices, len(assets), lookback=20)
     entries = apply_time_filter(entries, prices.index)
+    entries = apply_adx_ny_filter(entries, prices, prices.index, len(assets))
     entries = apply_correlation_filter(entries, max_correlated=4)
 
     total_bars = len(prices)

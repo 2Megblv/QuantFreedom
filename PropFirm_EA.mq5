@@ -14,7 +14,8 @@ input double RiskPerTradePct = 0.5;         // Risk per trade (e.g. 0.5% of Equi
 input double TargetDailyProfitPct = 2.0;    // Aim daily profit of 1 - 3 %
 input double MaxDailyLossPct = 2.0;         // Max daily loss -2%
 input double MaxWeeklyLossPct = 5.0;        // Max weekly loss -5%
-input int LondonOpenHour = 8;               // London Open (Server Time)
+input int AsianOpenHour = 0;                // Asian Open (Server Time - Allows catching the 'Stationary Train')
+input int NYOpenHour = 14;                  // NY Open (Server Time)
 input int NYCloseHour = 17;                 // NY Close (Server Time)
 input int MinutesBeforeNYClose = 15;        // Close All Trades before NY Session Close
 input int NewsWindowMinutes = 30;           // No new Trades on News Event 30Min before and After
@@ -35,13 +36,14 @@ double StartOfWeekBalance = 0;
 
 // Global Indicator Handles
 int ATR_Handle = INVALID_HANDLE;
+int ADX_Handle = INVALID_HANDLE;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
   {
-   Print("Prop Firm EA Initialized with Trade Execution.");
+   Print("Prop Firm EA Initialized with Trade Execution & Precision Logic.");
    StartOfDayBalance = AccountInfoDouble(ACCOUNT_BALANCE);
    StartOfWeekBalance = AccountInfoDouble(ACCOUNT_BALANCE);
 
@@ -50,6 +52,14 @@ int OnInit()
    if(ATR_Handle == INVALID_HANDLE)
      {
       Print("Failed to initialize ATR indicator.");
+      return(INIT_FAILED);
+     }
+
+   // Initialize ADX Handle for NY Session precision filtering
+   ADX_Handle = iADX(_Symbol, PERIOD_M15, 14);
+   if(ADX_Handle == INVALID_HANDLE)
+     {
+      Print("Failed to initialize ADX indicator.");
       return(INIT_FAILED);
      }
 
@@ -62,6 +72,7 @@ int OnInit()
 void OnDeinit(const int reason)
   {
    if(ATR_Handle != INVALID_HANDLE) IndicatorRelease(ATR_Handle);
+   if(ADX_Handle != INVALID_HANDLE) IndicatorRelease(ADX_Handle);
   }
 
 //+------------------------------------------------------------------+
@@ -318,14 +329,20 @@ bool CheckWeeklyDrawdown()
   }
 
 //+------------------------------------------------------------------+
-//| Check Time/Session                                               |
+//| Check Time/Session (Asian to NY Close)                           |
 //+------------------------------------------------------------------+
 bool IsTradingSession()
   {
    MqlDateTime dt;
    TimeCurrent(dt);
    if (dt.day_of_week == 0 || dt.day_of_week == 6) return false;
-   if(dt.hour >= LondonOpenHour && dt.hour < NYCloseHour) return true;
+
+   // If we are inside the 15-minute liquidation window, DO NOT allow new trades
+   if(dt.hour == NYCloseHour - 1 && dt.min >= (60 - MinutesBeforeNYClose)) return false;
+
+   // Open from Asian Open (0) up to NY Close (17)
+   if(dt.hour >= AsianOpenHour && dt.hour < NYCloseHour) return true;
+
    return false;
   }
 
@@ -421,6 +438,20 @@ int EvaluateSignal(string symbol)
 
    double highestPrice = iHigh(symbol, PERIOD_M15, iHighest(symbol, PERIOD_M15, MODE_HIGH, 20, 1));
    double lowestPrice = iLow(symbol, PERIOD_M15, iLowest(symbol, PERIOD_M15, MODE_LOW, 20, 1));
+
+   // Check NY Session Precision Requirement (ADX Filter)
+   MqlDateTime dt;
+   TimeCurrent(dt);
+   if (dt.hour >= NYOpenHour)
+     {
+      double adx_array[];
+      if(CopyBuffer(ADX_Handle, 0, 0, 1, adx_array) > 0)
+        {
+         // If ADX is below 25 during NY session, the trend is weak (whipsaw territory).
+         // We demand 80% precision (strong mathematical momentum) to enter.
+         if (adx_array[0] < 25.0) return 0;
+        }
+     }
 
    // Breakout confirmation (Long)
    if(currentAsk >= highestPrice)
