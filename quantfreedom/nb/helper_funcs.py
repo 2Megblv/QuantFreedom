@@ -690,7 +690,11 @@ def fill_strategy_result_records_nb(
 ) -> RecordArray:
     # win rate calc
     win_loss = np.where(wins_and_losses_array_no_be < 0, 0, 1)
-    win_rate = 0.0 if win_loss.size == 0 else round(np.count_nonzero(win_loss) / win_loss.size * 100, 2)
+
+    if win_loss.size == 0:
+        win_rate = 0.0
+    else:
+        win_rate = round((np.count_nonzero(win_loss) / win_loss.size) * 100, 2)
 
     total_pnl = temp_strat_records["real_pnl"][
         ~np.isnan(temp_strat_records["real_pnl"])

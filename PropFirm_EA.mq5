@@ -10,6 +10,7 @@
 CTrade trade;
 
 //--- Inputs
+input ulong MagicNumber = 8888;             // Magic Number (Unique ID per EA instance)
 input double RiskPerTradePct = 0.5;         // Risk per trade (e.g. 0.5% of Equity)
 input double MaxDailyLossPct = 2.0;         // Max daily loss -2%
 input double MaxWeeklyLossPct = 5.0;        // Max weekly loss -5%
@@ -57,9 +58,10 @@ void UpdateDashboard(string statusMessage)
   {
    string dashboard = "==============================\n";
    dashboard += "    PROP FIRM EA PRO\n";
-   dashboard += "    Version: 1.30\n";
+   dashboard += "    Version: 2.10\n";
    dashboard += "==============================\n";
    dashboard += "Symbol: " + _Symbol + "\n";
+   dashboard += "Magic: " + IntegerToString(MagicNumber) + "\n";
    dashboard += "Status: " + statusMessage + "\n";
    dashboard += "==============================";
 
@@ -72,15 +74,21 @@ void UpdateDashboard(string statusMessage)
 int OnInit()
   {
    Print("Prop Firm EA Initialized with NY Session Capital Preservation Logic.");
+
+   // Set Magic Number for Trade Execution
+   trade.SetExpertMagicNumber(MagicNumber);
+
    StartOfDayBalance = AccountInfoDouble(ACCOUNT_BALANCE);
    StartOfWeekBalance = AccountInfoDouble(ACCOUNT_BALANCE);
 
-   // Set Chart Colors to Light Purple (Lavender)
-   ChartSetInteger(0, CHART_COLOR_BACKGROUND, clrLavender);
-   ChartSetInteger(0, CHART_COLOR_FOREGROUND, clrBlack); // Ensure text is visible
-   ChartSetInteger(0, CHART_COLOR_GRID, clrGray);
-   ChartSetInteger(0, CHART_COLOR_CANDLE_BULL, clrGreen);
-   ChartSetInteger(0, CHART_COLOR_CANDLE_BEAR, clrRed);
+   // Set Chart Colors to Dark Professional Theme
+   ChartSetInteger(0, CHART_COLOR_BACKGROUND, clr#1E1E24);   // Dark Slate Gray Background
+   ChartSetInteger(0, CHART_COLOR_FOREGROUND, clrSilver);    // Silver Text
+   ChartSetInteger(0, CHART_COLOR_GRID, clr#2B2B36);         // Faint Grid
+   ChartSetInteger(0, CHART_COLOR_CANDLE_BULL, clrSeaGreen); // Muted Bull Candle
+   ChartSetInteger(0, CHART_COLOR_CANDLE_BEAR, clrIndianRed); // Muted Bear Candle
+   ChartSetInteger(0, CHART_COLOR_CHART_UP, clrSeaGreen);
+   ChartSetInteger(0, CHART_COLOR_CHART_DOWN, clrIndianRed);
 
    UpdateDashboard("Initializing...");
 
@@ -262,6 +270,10 @@ void ManageOpenPositions()
       ulong ticket = PositionGetTicket(i);
       if(ticket == 0) continue;
 
+      // Filter out trades not belonging to this EA/Asset
+      if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+
       string symbol = PositionGetString(POSITION_SYMBOL);
       double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
       double currentPrice = PositionGetDouble(POSITION_PRICE_CURRENT);
@@ -416,7 +428,15 @@ void CloseBeforeNYSession()
 
 void CloseAllPositions()
   {
-   for(int i = PositionsTotal() - 1; i >= 0; i--) trade.PositionClose(PositionGetTicket(i));
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      // Ensure we only close trades belonging to this instance
+      if(PositionGetInteger(POSITION_MAGIC) == MagicNumber && PositionGetString(POSITION_SYMBOL) == _Symbol)
+        {
+         trade.PositionClose(ticket);
+        }
+     }
   }
 
 bool IsNewsWindow(string symbol)
@@ -426,6 +446,13 @@ bool IsNewsWindow(string symbol)
    datetime startTime = currentTime - (NewsWindowMinutes * 60);
    datetime endTime = currentTime + (NewsWindowMinutes * 60);
 
+   // Attempt to isolate the currency for the news filter based on the symbol
+   // For example, "EURUSD" -> "EUR" and "USD". For "US30", we'll assume "USD".
+   string base_currency = StringSubstr(symbol, 0, 3);
+   string quote_currency = StringSubstr(symbol, 3, 3);
+   if (StringFind(symbol, "US") != -1 || StringFind(symbol, "SPX") != -1 || StringFind(symbol, "NAS") != -1) base_currency = "USD";
+   if (StringFind(symbol, "DAX") != -1) base_currency = "EUR";
+
    if(CalendarValueHistory(values, startTime, endTime))
      {
       for(int i = 0; i < ArraySize(values); i++)
@@ -433,7 +460,16 @@ bool IsNewsWindow(string symbol)
          MqlCalendarEvent event;
          if(CalendarEventById(values[i].event_id, event))
            {
-            if(event.importance == CALENDAR_IMPORTANCE_HIGH) return true;
+            if(event.importance == CALENDAR_IMPORTANCE_HIGH)
+              {
+               // Filter events to only those affecting the base or quote currency of this chart
+               string event_ccy = event.country_code;
+               // MT5 country_code is usually "US", "GB", "EU", etc.
+               if(StringFind(base_currency, event_ccy) != -1 || StringFind(quote_currency, event_ccy) != -1 || event_ccy == "US" && base_currency == "USD")
+                 {
+                  return true; // Currency match, block trading
+                 }
+              }
            }
         }
      }
