@@ -33,13 +33,13 @@ bool CVolatilityMomentum::EvaluateEntry(string symbol, double adx, double adxPre
    // drastically worsening the risk-to-reward ratio and increasing stop-outs.
    // Standardizing entry thresholds across all 24 hours.
 
-   double reqAdx = 25.0;
-   double reqVolMult = 2.0;
+   double reqAdx = 20.0;
+   double reqVolMult = 1.5;
 
    if(adx < reqAdx) return false;          // Require structural trend
 
    // Sprint 5: VSA Proxy Filter
-   if(tickVolMA > 0 && tickVol < tickVolMA * reqVolMult) return false; // Genuine algorithmic surges spike volume 200%+
+   if(tickVolMA > 0 && tickVol < tickVolMA * reqVolMult) return false; // Genuine algorithmic surges spike volume 150%+
 
    // v8.6.1: ADX Slope Validation (prevent entry on falling ADX = trend exhaustion)
    if(!IsADXRising(adx, adxPrevious))
