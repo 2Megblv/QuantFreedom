@@ -4,28 +4,30 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2024, Trading Systems"
 #property link      ""
-#property version   "2.00"
+#property version   "3.00"
 
 #include <Trade\Trade.mqh>
 CTrade trade;
 
 //--- Inputs
 input double RiskPerTradePct = 0.5;         // Risk per trade (e.g. 0.5% of Equity)
-input double TargetDailyProfitPct = 2.0;    // Aim daily profit of 1 - 3 %
 input double MaxDailyLossPct = 2.0;         // Max daily loss -2%
 input double MaxWeeklyLossPct = 5.0;        // Max weekly loss -5%
-input int AsianOpenHour = 0;                // Asian Open (Server Time - Allows catching the 'Stationary Train')
+
+// Session Times
+input int AsianOpenHour = 0;                // Asian Open
 input int NYOpenHour = 14;                  // NY Open (Server Time)
 input int NYCloseHour = 17;                 // NY Close (Server Time)
-input int MinutesBeforeNYClose = 15;        // Close All Trades before NY Session Close
+input int MinutesBeforeNYClose = 15;        // Hard Rule: Close 15 mins before NY close
+input int AggressiveTrailHoursBeforeClose = 2; // Aggressive trailing kicks in 2 hours before close
 input int NewsWindowMinutes = 30;           // No new Trades on News Event 30Min before and After
 
 // Trade Management Settings
-input int ATR_Period = 14;                  // ATR Period for Stop Loss Calculation
-input double ATR_Multiplier = 1.5;          // ATR Multiplier for Stop Loss
-input double RiskRewardRatio = 2.4;         // Take Profit = Risk * 2.4
-input bool UseBreakEven = true;             // Move to Break Even at 1:1 RR
-input bool UseTrailingStop = true;          // Enable Trailing Stop after 1:1
+input int ATR_Period = 14;
+input double ATR_Multiplier = 1.5;          // Initial SL
+input double PartialTakeProfitRR = 1.2;     // 50% TP distance (e.g. 1.2x Risk)
+input double ExtendedTakeProfitRR = 4.8;    // Extended TP for the remaining 50%
+input double NY_Precision_ADX_Level = 30.0; // >= 80% Confidence Level required for NY Entries
 
 // Hardcoded Assets
 string AssetsToTrade[] = {"GBPJPY", "US30", "USOIL", "XAUUSD", "DAX30", "NDAQ", "SPX500"};
@@ -43,32 +45,22 @@ int ADX_Handle = INVALID_HANDLE;
 //+------------------------------------------------------------------+
 int OnInit()
   {
-   Print("Prop Firm EA Initialized with Trade Execution & Precision Logic.");
+   Print("Prop Firm EA Initialized with NY Session Capital Preservation Logic.");
    StartOfDayBalance = AccountInfoDouble(ACCOUNT_BALANCE);
    StartOfWeekBalance = AccountInfoDouble(ACCOUNT_BALANCE);
 
-   // Initialize ATR Handle once globally to prevent memory leaks/lag
    ATR_Handle = iATR(_Symbol, PERIOD_M15, ATR_Period);
-   if(ATR_Handle == INVALID_HANDLE)
-     {
-      Print("Failed to initialize ATR indicator.");
-      return(INIT_FAILED);
-     }
-
-   // Initialize ADX Handle for NY Session precision filtering
    ADX_Handle = iADX(_Symbol, PERIOD_M15, 14);
-   if(ADX_Handle == INVALID_HANDLE)
+
+   if(ATR_Handle == INVALID_HANDLE || ADX_Handle == INVALID_HANDLE)
      {
-      Print("Failed to initialize ADX indicator.");
+      Print("Failed to initialize indicators.");
       return(INIT_FAILED);
      }
 
    return(INIT_SUCCEEDED);
   }
 
-//+------------------------------------------------------------------+
-//| Expert deinitialization function                                 |
-//+------------------------------------------------------------------+
 void OnDeinit(const int reason)
   {
    if(ATR_Handle != INVALID_HANDLE) IndicatorRelease(ATR_Handle);
@@ -80,55 +72,33 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
   {
-   // 1. Check Drawdown Rules
    if(CheckDailyDrawdown() || CheckWeeklyDrawdown()) return;
 
-   // 2. Manage EOD Closing (Run on every tick before session check)
+   // HARD RULE: Close all trades 15 mins before NY Close
    CloseBeforeNYSession();
 
-   // 3. Check Session Rules (Time Filters)
-   if(!IsTradingSession())
-     {
-      return;
-     }
+   if(!IsTradingSession()) return;
 
-   // 4. News & Correlation Check
    if(IsNewsWindow(_Symbol) || !CheckCorrelation()) return;
 
-   // 5. Manage Open Positions (Break-Even & Trailing Stops)
+   // Manage Open Positions (Partial TPs, Break-Even, Aggressive NY Trailing)
    ManageOpenPositions();
 
-   // 6. Signal Evaluation for Current Symbol
-   // Prevent opening more trades if we reached our concurrency limit
-   if (!HasOpenPosition(_Symbol)) // Only 1 trade per symbol
+   // Entry Logic
+   if (!HasOpenPosition(_Symbol))
      {
+      // No NY Trades if we have existing positions globally, to preserve capital
+      if (IsNYSession() && PositionsTotal() > 0) return;
+
       int signal = EvaluateSignal(_Symbol);
 
-      if(signal == 1) // Buy
-        {
-         ExecuteTrade(_Symbol, ORDER_TYPE_BUY);
-        }
-      else if (signal == -1) // Sell
-        {
-         ExecuteTrade(_Symbol, ORDER_TYPE_SELL);
-        }
+      if(signal == 1) ExecuteTrade(_Symbol, ORDER_TYPE_BUY);
+      else if (signal == -1) ExecuteTrade(_Symbol, ORDER_TYPE_SELL);
      }
   }
 
 //+------------------------------------------------------------------+
-//| Check if Symbol has open position                                |
-//+------------------------------------------------------------------+
-bool HasOpenPosition(string symbol)
-  {
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
-     {
-      if(PositionGetSymbol(i) == symbol) return true;
-     }
-   return false;
-  }
-
-//+------------------------------------------------------------------+
-//| Execute Trade with Risk Management                               |
+//| Execute Trade (Two Halves for Partial TP)                        |
 //+------------------------------------------------------------------+
 void ExecuteTrade(string symbol, ENUM_ORDER_TYPE orderType)
   {
@@ -141,73 +111,69 @@ void ExecuteTrade(string symbol, ENUM_ORDER_TYPE orderType)
    double tickValue = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
 
    double stopLossDist = atr_value * ATR_Multiplier;
-   double takeProfitDist = stopLossDist * RiskRewardRatio;
 
-   double slPrice = 0;
-   double tpPrice = 0;
-   double entryPrice = 0;
-
-   if (orderType == ORDER_TYPE_BUY)
-     {
-      entryPrice = ask;
-      slPrice = entryPrice - stopLossDist;
-      tpPrice = entryPrice + takeProfitDist;
-     }
-   else if (orderType == ORDER_TYPE_SELL)
-     {
-      entryPrice = bid;
-      slPrice = entryPrice + stopLossDist;
-      tpPrice = entryPrice - takeProfitDist;
-     }
-
-   // Calculate Lot Size based on Risk %
+   // Calculate Lot Size based on Total Risk %
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
    double riskAmount = equity * (RiskPerTradePct / 100.0);
-
-   // Convert SL distance to points/ticks
    double slTicks = stopLossDist / tickSize;
-   double lotSize = NormalizeDouble(riskAmount / (slTicks * tickValue), 2);
+   double totalLotSize = NormalizeDouble(riskAmount / (slTicks * tickValue), 2);
 
-   // Enforce Min/Max Lots
    double minLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
-   double maxLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
-   if (lotSize < minLot) lotSize = minLot;
-   if (lotSize > maxLot) lotSize = maxLot;
+   if (totalLotSize < minLot * 2) return; // Cannot split trade into 2 halves if too small
 
-   PrintFormat("Opening %s trade on %s. Size: %.2f, SL: %.5f, TP: %.5f", EnumToString(orderType), symbol, lotSize, slPrice, tpPrice);
+   // Split into two equal halves
+   double halfLot = NormalizeDouble(totalLotSize / 2.0, 2);
 
+   double entryPrice = (orderType == ORDER_TYPE_BUY) ? ask : bid;
+   double slPrice = (orderType == ORDER_TYPE_BUY) ? entryPrice - stopLossDist : entryPrice + stopLossDist;
+
+   // Half 1: Partial TP
+   double partialTpPrice = (orderType == ORDER_TYPE_BUY) ? entryPrice + (stopLossDist * PartialTakeProfitRR) : entryPrice - (stopLossDist * PartialTakeProfitRR);
+   // Half 2: Extended Trend TP
+   double extendedTpPrice = (orderType == ORDER_TYPE_BUY) ? entryPrice + (stopLossDist * ExtendedTakeProfitRR) : entryPrice - (stopLossDist * ExtendedTakeProfitRR);
+
+   // Execute both halves
    if (orderType == ORDER_TYPE_BUY)
      {
-      trade.Buy(lotSize, symbol, entryPrice, slPrice, tpPrice, "PropFirm Breakout");
+      trade.Buy(halfLot, symbol, entryPrice, slPrice, partialTpPrice, "Asian/London Partial");
+      trade.Buy(halfLot, symbol, entryPrice, slPrice, extendedTpPrice, "Trend Runner");
      }
    else
      {
-      trade.Sell(lotSize, symbol, entryPrice, slPrice, tpPrice, "PropFirm Breakout");
+      trade.Sell(halfLot, symbol, entryPrice, slPrice, partialTpPrice, "Asian/London Partial");
+      trade.Sell(halfLot, symbol, entryPrice, slPrice, extendedTpPrice, "Trend Runner");
      }
   }
 
-//+------------------------------------------------------------------+
-//| Get ATR for Dynamic Stop Loss                                    |
-//+------------------------------------------------------------------+
 double GetATR()
   {
    if (ATR_Handle == INVALID_HANDLE) return 0.0;
-
    double atr_array[];
-   if(CopyBuffer(ATR_Handle, 0, 0, 1, atr_array) <= 0)
-     {
-      Print("Error copying ATR buffer.");
-      return 0.0;
-     }
-
+   if(CopyBuffer(ATR_Handle, 0, 0, 1, atr_array) <= 0) return 0.0;
    return atr_array[0];
   }
 
+double GetADX()
+  {
+   if (ADX_Handle == INVALID_HANDLE) return 0.0;
+   double adx_array[];
+   if(CopyBuffer(ADX_Handle, 0, 0, 1, adx_array) <= 0) return 0.0;
+   return adx_array[0];
+  }
+
 //+------------------------------------------------------------------+
-//| Manage Open Positions (Trailing Stop / Break Even)               |
+//| Manage Open Positions (Aggressive NY Risk Control)               |
 //+------------------------------------------------------------------+
 void ManageOpenPositions()
   {
+   MqlDateTime dt;
+   TimeCurrent(dt);
+
+   // Check if we are in the last 2 hours of the NY session
+   bool isAggressiveNYClose = (dt.hour >= (NYCloseHour - AggressiveTrailHoursBeforeClose));
+   double currentADX = GetADX();
+   bool isWeakeningTrend = (currentADX < 20.0); // ADX dropping implies ranging/compression
+
    for(int i = PositionsTotal() - 1; i >= 0; i--)
      {
       ulong ticket = PositionGetTicket(i);
@@ -222,62 +188,48 @@ void ManageOpenPositions()
       double atr_value = GetATR();
       double riskAmount = atr_value * ATR_Multiplier;
 
-      // Long Position Management
-      if(type == POSITION_TYPE_BUY)
+      // Aggressive Pre-Close Risk Control
+      if (isAggressiveNYClose && isWeakeningTrend)
         {
-         // Break-Even Logic (Price moved 1:1 in our favor)
-         if(UseBreakEven && currentPrice >= (openPrice + riskAmount) && slPrice < openPrice)
-           {
-            Print("Moving Buy SL to Break-Even.");
-            trade.PositionModify(ticket, openPrice, PositionGetDouble(POSITION_TP));
-            continue; // Move to next position after modifying
-           }
+         // Apply aggressive 0.5x ATR trailing stop to preserve gains
+         double aggressiveTrailDist = atr_value * 0.5;
 
-         // Trailing Stop Logic
-         if(UseTrailingStop && currentPrice >= (openPrice + riskAmount))
+         if (type == POSITION_TYPE_BUY)
            {
-            double newSL = currentPrice - riskAmount;
-            if(newSL > slPrice)
-              {
-               Print("Trailing Buy SL upwards.");
-               trade.PositionModify(ticket, newSL, PositionGetDouble(POSITION_TP));
-              }
+            double newSL = currentPrice - aggressiveTrailDist;
+            if (newSL > slPrice) trade.PositionModify(ticket, newSL, PositionGetDouble(POSITION_TP));
            }
+         else if (type == POSITION_TYPE_SELL)
+           {
+            double newSL = currentPrice + aggressiveTrailDist;
+            if (newSL < slPrice || slPrice == 0) trade.PositionModify(ticket, newSL, PositionGetDouble(POSITION_TP));
+           }
+         continue;
         }
 
-      // Short Position Management
+      // Standard Trade Runner Logic (Post Partial TP)
+      // Moving to BE + standard trail if extended trade is in deep profit
+      if(type == POSITION_TYPE_BUY)
+        {
+         if(currentPrice >= (openPrice + riskAmount * PartialTakeProfitRR) && slPrice < openPrice)
+           {
+            trade.PositionModify(ticket, openPrice, PositionGetDouble(POSITION_TP)); // Move to BE
+           }
+        }
       if(type == POSITION_TYPE_SELL)
         {
-         // Break-Even Logic
-         if(UseBreakEven && currentPrice <= (openPrice - riskAmount) && (slPrice > openPrice || slPrice == 0))
+         if(currentPrice <= (openPrice - riskAmount * PartialTakeProfitRR) && (slPrice > openPrice || slPrice == 0))
            {
-            Print("Moving Sell SL to Break-Even.");
-            trade.PositionModify(ticket, openPrice, PositionGetDouble(POSITION_TP));
-            continue;
-           }
-
-         // Trailing Stop Logic
-         if(UseTrailingStop && currentPrice <= (openPrice - riskAmount))
-           {
-            double newSL = currentPrice + riskAmount;
-            if(newSL < slPrice || slPrice == 0)
-              {
-               Print("Trailing Sell SL downwards.");
-               trade.PositionModify(ticket, newSL, PositionGetDouble(POSITION_TP));
-              }
+            trade.PositionModify(ticket, openPrice, PositionGetDouble(POSITION_TP)); // Move to BE
            }
         }
      }
   }
 
 //+------------------------------------------------------------------+
-//| Check Daily Drawdown                                             |
-//+------------------------------------------------------------------+
 bool CheckDailyDrawdown()
   {
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
-
-   // Reset daily balance if a new day has started
    MqlDateTime dt;
    TimeCurrent(dt);
    static int lastDay = -1;
@@ -288,110 +240,78 @@ bool CheckDailyDrawdown()
      }
 
    double currentLossPct = (StartOfDayBalance - equity) / StartOfDayBalance * 100.0;
-
    if(currentLossPct >= MaxDailyLossPct)
      {
-      PrintFormat("WARNING: Daily Max Loss (%.2f%%) Hit! Trading suspended for the day.", currentLossPct);
       CloseAllPositions();
       return true;
      }
    return false;
   }
 
-//+------------------------------------------------------------------+
-//| Check Weekly Drawdown                                            |
-//+------------------------------------------------------------------+
 bool CheckWeeklyDrawdown()
   {
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
-
    MqlDateTime dt;
    TimeCurrent(dt);
    static int lastWeek = -1;
-   // Reset at the start of a new week (e.g. Monday)
    if(dt.day_of_week == 1 && dt.day != lastWeek)
      {
       StartOfWeekBalance = AccountInfoDouble(ACCOUNT_BALANCE);
       lastWeek = dt.day;
      }
-
    if (StartOfWeekBalance == 0) return false;
 
    double currentLossPct = (StartOfWeekBalance - equity) / StartOfWeekBalance * 100.0;
-
    if(currentLossPct >= MaxWeeklyLossPct)
      {
-      PrintFormat("WARNING: Weekly Max Loss (%.2f%%) Hit! Trading suspended for the week.", currentLossPct);
       CloseAllPositions();
       return true;
      }
    return false;
   }
 
-//+------------------------------------------------------------------+
-//| Check Time/Session (Asian to NY Close)                           |
-//+------------------------------------------------------------------+
 bool IsTradingSession()
   {
    MqlDateTime dt;
    TimeCurrent(dt);
    if (dt.day_of_week == 0 || dt.day_of_week == 6) return false;
-
-   // If we are inside the 15-minute liquidation window, DO NOT allow new trades
    if(dt.hour == NYCloseHour - 1 && dt.min >= (60 - MinutesBeforeNYClose)) return false;
-
-   // Open from Asian Open (0) up to NY Close (17)
    if(dt.hour >= AsianOpenHour && dt.hour < NYCloseHour) return true;
-
    return false;
   }
 
-//+------------------------------------------------------------------+
-//| Close all trades 15 mins before NY Session                       |
-//+------------------------------------------------------------------+
+bool IsNYSession()
+  {
+   MqlDateTime dt;
+   TimeCurrent(dt);
+   return (dt.hour >= NYOpenHour);
+  }
+
 void CloseBeforeNYSession()
   {
    MqlDateTime dt;
    TimeCurrent(dt);
-
    if(dt.hour == NYCloseHour - 1 && dt.min >= (60 - MinutesBeforeNYClose))
      {
       if (PositionsTotal() > 0)
         {
-         Print("Closing all open positions before NY Session closes...");
+         Print("HARD RULE: Closing all positions 15 mins before NY Session closes.");
          CloseAllPositions();
         }
      }
   }
 
-//+------------------------------------------------------------------+
-//| Close All Open Positions Helper                                  |
-//+------------------------------------------------------------------+
 void CloseAllPositions()
   {
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
-     {
-      ulong ticket = PositionGetTicket(i);
-      trade.PositionClose(ticket);
-     }
+   for(int i = PositionsTotal() - 1; i >= 0; i--) trade.PositionClose(PositionGetTicket(i));
   }
 
-//+------------------------------------------------------------------+
-//| News Filter (Using MT5 Built-in Economic Calendar API)           |
-//+------------------------------------------------------------------+
 bool IsNewsWindow(string symbol)
   {
-   // Array to store calendar events
    MqlCalendarValue values[];
-
-   // We look for events from 'NewsWindowMinutes' ago up to 'NewsWindowMinutes' in the future
    datetime currentTime = TimeCurrent();
    datetime startTime = currentTime - (NewsWindowMinutes * 60);
    datetime endTime = currentTime + (NewsWindowMinutes * 60);
-
-   // We need to know which currency relates to the symbol (e.g., "USD" for "US30", "GBP" for "GBPJPY")
-   // For simplicity, we fetch ALL country events here, but you should filter by 'currency' string
-   // to reduce processing load in a real live environment.
 
    if(CalendarValueHistory(values, startTime, endTime))
      {
@@ -400,36 +320,30 @@ bool IsNewsWindow(string symbol)
          MqlCalendarEvent event;
          if(CalendarEventById(values[i].event_id, event))
            {
-            // Check if the event is High Importance
-            if(event.importance == CALENDAR_IMPORTANCE_HIGH)
-              {
-               PrintFormat("High Impact News detected! Event ID: %I64d at Time: %s", event.id, TimeToString(values[i].time));
-               return true; // Block trading
-              }
+            if(event.importance == CALENDAR_IMPORTANCE_HIGH) return true;
            }
         }
      }
-
-   return false; // Safe to trade
+   return false;
   }
 
-//+------------------------------------------------------------------+
-//| Correlation / Concurrency Filter                                 |
-//+------------------------------------------------------------------+
 bool CheckCorrelation()
   {
-   // Limit the maximum number of concurrent open trades across all assets
-   // This acts as a proxy for our correlation and exposure risk filter.
-   // MaxCorrelatedAssets is defined as an input.
-   if (PositionsTotal() >= 4) // MaxCorrelatedAssets placeholder limit
-     {
-      return false; // Concurrency limit reached
-     }
+   if (PositionsTotal() >= 4) return false;
    return true;
   }
 
+bool HasOpenPosition(string symbol)
+  {
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      if(PositionGetSymbol(i) == symbol) return true;
+     }
+   return false;
+  }
+
 //+------------------------------------------------------------------+
-//| Signal Evaluation (Peak/Bottom Reversal/Continuation)            |
+//| Signal Evaluation (Precision Breakout)                           |
 //+------------------------------------------------------------------+
 int EvaluateSignal(string symbol)
   {
@@ -439,30 +353,15 @@ int EvaluateSignal(string symbol)
    double highestPrice = iHigh(symbol, PERIOD_M15, iHighest(symbol, PERIOD_M15, MODE_HIGH, 20, 1));
    double lowestPrice = iLow(symbol, PERIOD_M15, iLowest(symbol, PERIOD_M15, MODE_LOW, 20, 1));
 
-   // Check NY Session Precision Requirement (ADX Filter)
-   MqlDateTime dt;
-   TimeCurrent(dt);
-   if (dt.hour >= NYOpenHour)
+   if (IsNYSession())
      {
-      double adx_array[];
-      if(CopyBuffer(ADX_Handle, 0, 0, 1, adx_array) > 0)
-        {
-         // If ADX is below 25 during NY session, the trend is weak (whipsaw territory).
-         // We demand 80% precision (strong mathematical momentum) to enter.
-         if (adx_array[0] < 25.0) return 0;
-        }
+      double adx = GetADX();
+      // Precision Requirement: Require overwhelming directional bias (ADX > 30) for new NY Trades
+      if (adx < NY_Precision_ADX_Level) return 0;
      }
 
-   // Breakout confirmation (Long)
-   if(currentAsk >= highestPrice)
-     {
-      return 1; // Buy Signal
-     }
-   // Breakout confirmation (Short)
-   if(currentBid <= lowestPrice)
-     {
-      return -1; // Sell Signal
-     }
+   if(currentAsk >= highestPrice) return 1;
+   if(currentBid <= lowestPrice) return -1;
 
-   return 0; // No signal
+   return 0;
   }

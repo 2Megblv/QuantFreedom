@@ -142,7 +142,7 @@ except ImportError:
 def apply_adx_ny_filter(entries_df: pd.DataFrame, prices: pd.DataFrame, datetime_index: pd.DatetimeIndex, num_assets: int):
     """
     Simulates the precision ADX filter during NY Session (>= 14:00)
-    If time >= 14 and ADX < 25.0, set entry to False to avoid whipsaws.
+    If time >= 14 and ADX < 30.0, set entry to False to avoid whipsaws.
     Gracefully bypasses if talib is not installed.
     """
     if not TALIB_AVAILABLE:
@@ -157,8 +157,8 @@ def apply_adx_ny_filter(entries_df: pd.DataFrame, prices: pd.DataFrame, datetime
         # Calculate 14-period ADX
         adx_values = talib.ADX(high_prices, low_prices, close_prices, timeperiod=14)
 
-        # Mask where time is NY Session (>= 14) AND ADX is weak (< 25)
-        ny_whipsaw_mask = (datetime_index.hour >= 14) & (adx_values < 25.0)
+        # Mask where time is NY Session (>= 14) AND ADX is weak (< 30) - 80% Precision Req
+        ny_whipsaw_mask = (datetime_index.hour >= 14) & (adx_values < 30.0)
 
         # Apply filter to that asset's entries
         entries_df[(i, 0)] = entries_df[(i, 0)] & (~ny_whipsaw_mask)
