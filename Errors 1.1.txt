@@ -1,0 +1,4 @@
+2026.04.25 00:57:46.701	PropFirm_EA (EURUSD,M15)	cannot load indicator 'Average True Range' (US30) [4302]
+2026.04.25 00:57:46.701	PropFirm_EA (EURUSD,M15)	cannot load indicator 'Average Directional Movement Index' (US30) [4302]
+2026.04.25 00:57:46.701	PropFirm_EA (EURUSD,M15)	cannot load custom indicator 'QFisher_ARMI_TickVolume' (US30) [4302]
+2026.04.25 00:57:46.701	PropFirm_EA (EURUSD,M15)	Failed to initialize headless indicators for US30. Ensure QFisher_ARMI_TickVolume.ex5 is compiled in Indicators folder.
