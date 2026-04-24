@@ -82,9 +82,9 @@ int OnInit()
    StartOfWeekBalance = AccountInfoDouble(ACCOUNT_BALANCE);
 
    // Set Chart Colors to Dark Professional Theme
-   ChartSetInteger(0, CHART_COLOR_BACKGROUND, clr#1E1E24);
+   ChartSetInteger(0, CHART_COLOR_BACKGROUND, clrDarkSlateGray);
    ChartSetInteger(0, CHART_COLOR_FOREGROUND, clrSilver);
-   ChartSetInteger(0, CHART_COLOR_GRID, clr#2B2B36);
+   ChartSetInteger(0, CHART_COLOR_GRID, clrDimGray);
    ChartSetInteger(0, CHART_COLOR_CANDLE_BULL, clrSeaGreen);
    ChartSetInteger(0, CHART_COLOR_CANDLE_BEAR, clrIndianRed);
    ChartSetInteger(0, CHART_COLOR_CHART_UP, clrSeaGreen);
@@ -500,13 +500,11 @@ bool IsNewsWindow(string symbol)
            {
             if(event.importance == CALENDAR_IMPORTANCE_HIGH)
               {
-               // Filter events to only those affecting the base or quote currency of this chart
-               string event_ccy = event.country_code;
-               // MT5 country_code is usually "US", "GB", "EU", etc.
-               if(StringFind(base_currency, event_ccy) != -1 || StringFind(quote_currency, event_ccy) != -1 || event_ccy == "US" && base_currency == "USD")
-                 {
-                  return true; // Currency match, block trading
-                 }
+               // MT5 built-in calendar actually uses event.country_id (int) instead of strings
+               // To properly map country_id to currency strings requires calling CalendarCountryById.
+               // For safety and simplicity in this generalized blueprint, we revert to a Global News Block:
+               // If ANY High Impact news is happening, we block trading across the portfolio.
+               return true;
               }
            }
         }
