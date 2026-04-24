@@ -40,7 +40,7 @@ input bool UseExtendedTP = true;            // Execute the Extended TP half
 input bool AllowMultiplePositions = false;  // Allow multiple concurrent positions on a single symbol
 
 // Dynamic Assets List (Comma Separated)
-input string TradeAssets = "GBPJPY,US30,USOIL,XAUUSD,DAX30,NDAQ,SPX500";
+input string TradeAssets = "EURUSD,GBPJPY,U30USD,USOUSD,XAUUSD,D30EUR,NASUSD,SPXUSD";
 string AssetList[];
 
 // Variables for Drawdown tracking
