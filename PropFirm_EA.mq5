@@ -224,13 +224,21 @@ void ExecuteTrade(string symbol, ENUM_ORDER_TYPE orderType, int assetIndex)
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
    double riskAmount = equity * (RiskPerTradePct / 100.0);
    double slTicks = stopLossDist / tickSize;
-   double totalLotSize = NormalizeDouble(riskAmount / (slTicks * tickValue), 2);
+   double rawTotalLotSize = riskAmount / (slTicks * tickValue);
 
    double minLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
-   if (totalLotSize < minLot * 2) return; // Cannot split trade into 2 halves if too small
+   double maxLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+   double stepLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
 
-   // Split into two equal halves
-   double halfLot = NormalizeDouble(totalLotSize / 2.0, 2);
+   // Quantize lot size to the broker's exact step requirements to prevent "Invalid Volume" error
+   double totalLotSize = MathRound(rawTotalLotSize / stepLot) * stepLot;
+
+   if (totalLotSize < minLot * 2.0) return; // Cannot split trade into 2 halves if too small
+   if (totalLotSize > maxLot) totalLotSize = maxLot;
+
+   // Split into two equal halves and quantize again
+   double halfLot = MathRound((totalLotSize / 2.0) / stepLot) * stepLot;
+   if (halfLot < minLot) halfLot = minLot;
 
    double entryPrice = (orderType == ORDER_TYPE_BUY) ? ask : bid;
    double slPrice = (orderType == ORDER_TYPE_BUY) ? entryPrice - stopLossDist : entryPrice + stopLossDist;
