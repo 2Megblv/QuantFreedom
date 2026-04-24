@@ -57,14 +57,48 @@ int QFisher_Handles[];
 //+------------------------------------------------------------------+
 void UpdateDashboard(string statusMessage)
   {
-   string dashboard = "==============================\n";
-   dashboard += "    PROP FIRM EA PRO\n";
-   dashboard += "    Version: 2.20\n";
-   dashboard += "==============================\n";
-   dashboard += "Symbol: " + _Symbol + "\n";
-   dashboard += "Magic: " + IntegerToString(MagicNumber) + "\n";
-   dashboard += "Status: " + statusMessage + "\n";
-   dashboard += "==============================";
+   // Throttle updates to prevent system overload (approx. once per second)
+   // Forces an immediate update if the status message changes
+   static uint lastUpdate = 0;
+   static string lastStatus = "";
+   uint currentTick = GetTickCount();
+
+   if(currentTick - lastUpdate < 1000 && statusMessage == lastStatus) return;
+
+   lastUpdate = currentTick;
+   lastStatus = statusMessage;
+
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+
+   // Calculate Daily PnL Metrics
+   double dailyPnL = equity - StartOfDayBalance;
+   double dailyPnLPct = (StartOfDayBalance > 0) ? (dailyPnL / StartOfDayBalance) * 100.0 : 0.0;
+
+   // Tally active trades for this EA
+   int activePositions = 0;
+   double floatingPnL = 0;
+   for(int i = 0; i < PositionsTotal(); i++)
+     {
+      if(PositionGetInteger(POSITION_MAGIC) == MagicNumber)
+        {
+         activePositions++;
+         floatingPnL += PositionGetDouble(POSITION_PROFIT);
+        }
+     }
+
+   string dashboard = "===================================\n";
+   dashboard += "        PROP FIRM EA PRO v2.50\n";
+   dashboard += "===================================\n";
+   dashboard += StringFormat(" Equity:       $%.2f\n", equity);
+   dashboard += StringFormat(" Daily PnL:    $%.2f (%.2f%%)\n", dailyPnL, dailyPnLPct);
+   dashboard += StringFormat(" Daily Limit:  -%.1f%%\n", MaxDailyLossPct);
+   dashboard += "-----------------------------------\n";
+   dashboard += StringFormat(" Open Trades:  %d\n", activePositions);
+   dashboard += StringFormat(" Floating PnL: $%.2f\n", floatingPnL);
+   dashboard += "-----------------------------------\n";
+   dashboard += " System Status:\n " + statusMessage + "\n";
+   dashboard += "===================================";
 
    Comment(dashboard);
   }
@@ -202,7 +236,7 @@ void OnTick()
    if(isScanning)
       UpdateDashboard("Scanning for Precision Setups...");
    else
-      UpdateDashboard("Managing Active Trades / Pending Filters");
+      UpdateDashboard("Managing Active Trades / Pending Filters...");
   }
 
 //+------------------------------------------------------------------+
